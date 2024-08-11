@@ -1,0 +1,12 @@
+sample:
+  description:
+  name: power-module
+common:
+  build_only: true
+  integration_platforms:
+    - power_module@2
+tests:
+  backplane.deployment_mod.default: {}
+  backplane.deployment_mod.debug:
+    extra_overlay_confs:
+      - debug.conf

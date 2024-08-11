@@ -21,3 +21,13 @@ sensor:
 
 sensor-rel:
 	west build -b sensor_module app/backplane/sensor_module -p auto
+
+deployment:
+	west build -b deployment_module app/backplane/deployment_module -p auto -DOVERLAY_CONFIG=debug.conf
+
+deployment-native:
+	west build -b native_sim app/backplane/deployment_module -p auto
+
+
+deployment-rel:
+	west build -b deployment_module app/backplane/deployment_module -p auto
