@@ -3,6 +3,9 @@
         zephyr,console = &uart0;
         zephyr,shell-uart = &uart0;
     };
+    aliases {
+        barom = &barom;
+    };
 
 
     imu: imu {
