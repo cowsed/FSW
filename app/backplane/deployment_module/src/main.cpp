@@ -27,7 +27,7 @@ Line find_line() {
     return {m, b};
 }
 
-// const struct device imu = DEVICE_DT_GET_ONE(openrocket_imu);
+const struct device *imu = DEVICE_DT_GET_ONE(openrocket_imu);
 const struct device *barom = DEVICE_DT_GET(DT_ALIAS(barom));
 
 int main() {
@@ -48,7 +48,7 @@ int main() {
         Scalar t = (Scalar) ms / 1000.0;
         summer.feed(SampleType{t, s});
         Line l = find_line();
-        printk("%f %f: %f %f\n", (double) t, (double) s, (double) l.m, (double) l.b);
+        printk("%f %f %f %f\n", (double) t, (double) s, (double) l.m, (double) l.b);
         k_msleep(10);
     }
 }
