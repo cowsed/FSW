@@ -1,6 +1,8 @@
+#include "types.h"
+
+#include <f_core/util/debouncer.hpp>
 #include <zephyr/settings/settings.h>
 #include <zephyr/shell/shell.h>
-#include <zephyr/sys/reboot.h>
 
 bool settings_modified = false;
 
@@ -93,6 +95,7 @@ bool validate_number(const struct shell *sh, char *number) {
 }
 static int deploy_handler(const struct shell *sh, size_t argc, char **argv, void *data) {
     int which = (int) data;
+    auto channel = static_cast<DeploymentChannel>(which);
     char *which_str = argv[0];
 
     // y/n
@@ -147,20 +150,20 @@ static int deploy_handler(const struct shell *sh, size_t argc, char **argv, void
 // clang-format off
 
 SHELL_SUBCMD_DICT_SET_CREATE(sub_noseover_detect_mix, noseover_detect_mix_handler, 
-                            (Or, 1, "or"), 
-                            (And, 2, "and")
+                            (Or, MixStrategy::Or, "or"), 
+                            (And, MixStrategy::And, "and")
                             );
 
 SHELL_SUBCMD_DICT_SET_CREATE(sub_deploy, deploy_handler, 
-                            (main, 1, "main"), 
-                            (drogue, 2, "drogue")
+                            (main, DeploymentChannel::Main, "main"), 
+                            (drogue, DeploymentChannel::Drogue, "drogue")
                             );
 
 SHELL_SUBCMD_DICT_SET_CREATE(sub_boost_detect_mix, boost_detect_mix_handler, 
-                            (accel, 1, "accelerometer"), 
-                            (altim, 2, "altimeter"),
-                            (both, 3, "both"),
-                            (either, 4, "either")
+                            (accel, BoostDetectMix::Accel, "accelerometer"), 
+                            (altim, BoostDetectMix::Altimeter, "altimeter"),
+                            (both, BoostDetectMix::Both, "both"),
+                            (either, BoostDetectMix::Either, "either")
                             );
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_noseover, 

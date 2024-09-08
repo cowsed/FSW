@@ -5,6 +5,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/reboot.h>
+#include <zephyr/ztest.h>
 
 using Scalar = double;
 using SampleType = LinearFitSample<Scalar>;
@@ -91,4 +92,10 @@ int main() {
         printk("%f %f %f %f\n", (double) t, (double) s, (double) l.m, (double) l.b);
         k_msleep(1000);
     }
+}
+
+static void test_assert() { zassert_true(1, "1 was true"); }
+void test_main() {
+    ztest_test_suite(debouncer_tests, ztest_unit_test(test_assert));
+    ztest_run_test_suite(debouncer_tests);
 }

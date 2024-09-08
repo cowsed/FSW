@@ -1,10 +1,10 @@
 sample:
   description:
-  name: power-module
+  name: deployment-module
 common:
   build_only: true
   integration_platforms:
-    - power_module@2
+    - native_sim
 tests:
   backplane.deployment_mod.default: {}
   backplane.deployment_mod.debug:
