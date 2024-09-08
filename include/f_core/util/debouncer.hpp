@@ -6,15 +6,15 @@ enum class ThresholdDirection {
 template <ThresholdDirection direction, typename Scalar = float, typename Timestamp = uint32_t> class Debuouncer {
   public:
     Debuouncer(Timestamp duration, Scalar target_value) : duration(duration), target_value(target_value) {}
-    bool feed(Timestamp t, Scalar new_value) {
-        if (passesOne(value)) {
+    void feed(Timestamp t, Scalar new_value) {
+        if (passesOne(new_value)) {
             lastTimePassed = t;
             if (firstTimePassed == NOT_PASSED) {
                 firstTimePassed = t;
             }
         } else {
-            firstTimePassed == NOT_PASSED;
-            lastTimePassed == NOT_PASSED;
+            firstTimePassed = NOT_PASSED;
+            lastTimePassed = NOT_PASSED;
         }
     }
     bool passed() {
@@ -26,16 +26,16 @@ template <ThresholdDirection direction, typename Scalar = float, typename Timest
 
   private:
     bool passesOne(Scalar new_value) {
-        if constexpr (direction == Over) {
-            reutrn new_value > target_value;
+        if constexpr (direction == ThresholdDirection::Over) {
+            return new_value > target_value;
         } else {
             return new_value < target_value;
         }
     }
-    Timestmap duration;
-    Value target_value;
+    Timestamp duration;
+    Scalar target_value;
 
-    constexpr Timestamp NOT_PASSED = (Timetamp) ~0;
+    static constexpr Timestamp NOT_PASSED = (Timestamp) ~0;
 
     Timestamp firstTimePassed = NOT_PASSED;
     Timestamp lastTimePassed = NOT_PASSED;
