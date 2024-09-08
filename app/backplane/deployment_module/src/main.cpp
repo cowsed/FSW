@@ -1,11 +1,11 @@
 #include "linear_fit.hpp"
 
+#include <f_core/util/debouncer.hpp>
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/kernel.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/reboot.h>
-#include <zephyr/ztest.h>
 
 using Scalar = double;
 using SampleType = LinearFitSample<Scalar>;
@@ -65,14 +65,8 @@ int main() {
     settings_register(&my_conf);
     settings_load();
 
-    // foo_val++;
-    // settings_save_one("detect/bar", &foo_val, sizeof(foo_val));
-
-    printk("detect acell win size ms: %d\n", accel_boost_detect_window_size_ms);
-
-    k_msleep(100000);
-    sys_reboot(SYS_REBOOT_COLD);
-    return 0;
+    Debuouncer<ThresholdDirection::Under, float, uint32_t> db{100, 0.2};
+    int i = 0;
     while (true) {
         struct sensor_value pressure;
         int err = sensor_sample_fetch(barom);
@@ -83,19 +77,18 @@ int main() {
         if (err < 0) {
             printk("err getting");
         }
-        double p = sensor_value_to_double(&pressure);
-        Scalar s = p;
+        double height = -sensor_value_to_double(&pressure);
+
         uint64_t ms = k_uptime_get();
         Scalar t = (Scalar) ms / 1000.0;
-        summer.feed(SampleType{t, s});
+        summer.feed(SampleType{t, height});
         Line l = find_line();
-        printk("%f %f %f %f\n", (double) t, (double) s, (double) l.m, (double) l.b);
-        k_msleep(1000);
+        db.feed(ms, l.m);
+        if (i % 100 == 0 && i > window_size) {
+            printk("%.3f %.3f %.3f %.3f %d\n", (double) t, (double) height, (double) l.m, (double) l.b,
+                   (int) db.passed());
+        }
+        i++;
+        k_msleep(10);
     }
-}
-
-static void test_assert() { zassert_true(1, "1 was true"); }
-void test_main() {
-    ztest_test_suite(debouncer_tests, ztest_unit_test(test_assert));
-    ztest_run_test_suite(debouncer_tests);
 }
