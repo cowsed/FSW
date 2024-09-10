@@ -7,17 +7,7 @@
 bool settings_modified = false;
 
 static int noseover_detect_mix_handler(const struct shell *sh, size_t argc, char **argv, void *data) {
-    int gain;
-
-    /* data is a value corresponding to called command syntax */
-    gain = (int) data;
-    // adc_set_gain(gain);
-
-    shell_print(sh,
-                "ADC gain set to: %s\n"
-                "Value send to ADC driver: %d",
-                argv[0], gain);
-
+    shell_print(sh, "UNIMPLEMENTED");
     return 0;
 }
 
@@ -27,6 +17,7 @@ static int boost_detect_mix_handler(const struct shell *sh, size_t argc, char **
     /* data is a value corresponding to called command syntax */
     gain = (int) data;
     // adc_set_gain(gain);
+    shell_print(sh, "UNIMPLEMENTED");
 
     shell_print(sh,
                 "Boost mix: %s\n"
@@ -37,6 +28,7 @@ static int boost_detect_mix_handler(const struct shell *sh, size_t argc, char **
 }
 
 static int cmd_noseover_vel_handler(const struct shell *sh, size_t argc, char **argv, void *data) {
+    shell_print(sh, "UNIMPLEMENTED");
     shell_print(sh, "Me when i uhhhhhh %s", argv[0]);
     return 0;
 }
@@ -95,7 +87,7 @@ bool validate_number(const struct shell *sh, char *number) {
 }
 static int deploy_handler(const struct shell *sh, size_t argc, char **argv, void *data) {
     int which = (int) data;
-    auto channel = static_cast<DeploymentChannel>(which);
+    // auto channel = static_cast<DeploymentChannel>(which);
     char *which_str = argv[0];
 
     // y/n
