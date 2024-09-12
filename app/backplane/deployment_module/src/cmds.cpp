@@ -86,7 +86,7 @@ bool validate_number(const struct shell *sh, char *number) {
     return (sum + (int) last) % 10 == 0;
 }
 static int deploy_handler(const struct shell *sh, size_t argc, char **argv, void *data) {
-    int which = (int) data;
+    // int which = (int) data;
     // auto channel = static_cast<DeploymentChannel>(which);
     char *which_str = argv[0];
 

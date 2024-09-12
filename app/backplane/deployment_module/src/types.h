@@ -17,7 +17,13 @@ template <typename Value, typename TimestampT = uint32_t> struct Timestamped {
     value_type value;
 };
 
+using Scalar = double;
+using FeetPerSec_f32 = Scalar;
+
+using Milliseconds_u32 = uint32_t;
+using Feet_f32 = Scalar;
+
 struct Line {
-    float m;
-    float b;
+    Scalar m;
+    Scalar b;
 };
