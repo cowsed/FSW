@@ -77,7 +77,7 @@ static void line_fitting_cb(const struct zbus_channel *chan) {
 ZBUS_LISTENER_DEFINE(bme_lis, line_fitting_cb);
 
 Milliseconds_u32 noseover_time = 100;
-FeetPerSec_f32 noseover_velocity = 0.5;
+FeetPerSec_f32 noseover_velocity = 10;
 
 LineFittingCBData bmecbd{
     .label = "bme280",
@@ -89,9 +89,8 @@ LineFittingCBData bmecbd{
 // .summer = RollingSum<SampleType, window_size>{},
 // };
 
-ZBUS_CHAN_DEFINE(bme_telem_chan,           /* Name */
-                 Timestamped<altim_telem>, /* Message type */
-
+ZBUS_CHAN_DEFINE(bme_telem_chan,                                               /* Name */
+                 Timestamped<altim_telem>,                                     /* Message type */
                  NULL,                                                         /* Validator */
                  &bmecbd,                                                      /* User Data */
                  ZBUS_OBSERVERS(bme_lis),                                      /* observers */
@@ -108,9 +107,7 @@ ZBUS_CHAN_DEFINE(bme_telem_chan,           /* Name */
 
 int main() {
 
-    Debuouncer<ThresholdDirection::Under, Scalar, uint32_t> db{100, 0.2};
     int i = 0;
-    Timestamped<altim_telem> telem = {};
     while (true) {
 
         struct sensor_value pressure;
@@ -130,6 +127,7 @@ int main() {
 
         uint64_t ms = k_uptime_get();
 
+        Timestamped<altim_telem> telem = {};
         telem.time = ms;
         telem.value.press = sensor_value_to_float(&pressure);
         telem.value.temp = sensor_value_to_float(&temp);
