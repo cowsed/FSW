@@ -1,8 +1,10 @@
+#pragma once
 #include <stdint.h>
 enum class ThresholdDirection {
     Over,
     Under,
 };
+
 template <ThresholdDirection direction, typename Scalar = float, typename Timestamp = uint32_t> class Debuouncer {
   public:
     Debuouncer(Timestamp duration, Scalar target_value) : duration(duration), target_value(target_value) {}

@@ -2,7 +2,6 @@
 #include "types.h"
 
 #include <f_core/util/debouncer.hpp>
-#include <math.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/kernel.h>
@@ -12,11 +11,24 @@
 #include <zephyr/zbus/zbus.h>
 LOG_MODULE_DECLARE(dep_mod);
 
-using SampleType = LinearFitSample<FeetPerSec_f32>;
-static constexpr std::size_t window_size = 10;
+using SampleType = LinearFitSample<FeetPerSec>;
 
+static constexpr std::size_t gl_window_size = 10;
+using GLAvger = MovingAvg<Feet, gl_window_size>;
+
+static constexpr std::size_t window_size = 10;
 using SummerType = RollingSum<SampleType, window_size>;
+
 using NoseoverDebouncerT = Debuouncer<ThresholdDirection::Under, Scalar>;
+using MainHeightDebouncer = Debuouncer<ThresholdDirection::Under, Scalar>;
+using GroundLevelDebouncer = Debuouncer<ThresholdDirection::Under, Scalar>;
+
+Feet calc_alt(KiloPa press_kpa, Celsius temp_c) {
+    Scalar pressure = press_kpa * 10;
+    Scalar altitude = (1 - pow(pressure / 1'013.25, 0.190284)) * 145'366.45;
+    return altitude;
+}
+static Phase current_phase = Phase::Pad;
 
 Line find_line(const SummerType &summer) {
     std::size_t N = summer.size();
@@ -31,44 +43,107 @@ Line find_line(const SummerType &summer) {
     return {m, b};
 }
 
+static void do_state_transition(const struct zbus_channel *chan) { printk("who up transitioning they state"); }
+ZBUS_LISTENER_DEFINE(state_transition_lis, do_state_transition);
+bool event_validator(const void *msg, size_t msg_size) {
+    auto ev = (Timestamped<Event> *) msg;
+    printk("Sending State: %d from %d\n", (int) ev->value.typ, (int) ev->value.source);
+    if (ev->value.typ == EventType::Noseover) {
+        current_phase = Phase::UnderDrogue;
+    } else if (ev->value.typ == EventType::Main) {
+        current_phase = Phase::UnderMain;
+    }
+
+    return false;
+}
+
+ZBUS_CHAN_DEFINE(events_chan,                          /* Name */
+                 Timestamped<Event>,                   /* Message type */
+                 event_validator,                      /* Validator */
+                 NULL,                                 /* User Data */
+                 ZBUS_OBSERVERS(state_transition_lis), /* observers */
+                 ZBUS_MSG_INIT(Timestamped<Event>{0,
+                                                  Event{EventType::TurnOn, SensorType::Other}}) /* Initial value {0} */
+);
+
 const struct device *imu = DEVICE_DT_GET_ONE(openrocket_imu);
 const struct device *barom = DEVICE_DT_GET(DT_ALIAS(barom));
 
-struct LineFittingCBData {
+struct AltimCBData {
     const char *label;
-    SummerType summer;
-    NoseoverDebouncerT noseover_debouncer;
-    int samples = 0; // we need to get at least window_size samples before any of our data is valid
-};
+    SensorType self;
 
-Scalar calc_alt(float press_kpa, float temp_c) {
-    Scalar pressure = press_kpa * 10;
-    Scalar altitude = (1 - pow(pressure / 1'013.25, 0.190284)) * 145'366.45;
-    return altitude;
-}
+    GLAvger ground_level_avger;
+
+    SummerType line_fitting_summer;
+    NoseoverDebouncerT noseover_debouncer;
+    int summer_samples = 0; // we need to get at least window_size samples before any of our data is valid
+
+    MainHeightDebouncer main_debouncer;
+
+    GroundLevelDebouncer end_of_flight_debouncer;
+};
 
 static void line_fitting_cb(const struct zbus_channel *chan) {
     const Timestamped<altim_telem> *telem = (Timestamped<altim_telem> *) zbus_chan_const_msg(chan);
-    LineFittingCBData *dat = (LineFittingCBData *) chan->user_data;
+    AltimCBData *dat = (AltimCBData *) chan->user_data;
 
-    Scalar time_ms = telem->time;
+    Milliseconds_u32 time_ms = telem->time;
     Scalar time = time_ms / 1000.0; // we want velocity in ft/s
-    Scalar alt = calc_alt(telem->value.press, telem->value.temp);
+    Scalar asl_alt = calc_alt(telem->value.press, telem->value.temp);
+    Feet agl_alt = asl_alt - dat->ground_level_avger.avg();
 
-    dat->summer.feed(SampleType{time, alt});
-    Line l = find_line(dat->summer);
-    Scalar vel = l.m;
-    dat->noseover_debouncer.feed(time_ms, vel);
-    dat->samples++;
+    dat->line_fitting_summer.feed(SampleType{time, agl_alt});
 
-    if (dat->samples < window_size + 1) {
+    if (current_phase == Phase::Pad) {
+        dat->ground_level_avger.feed(asl_alt);
+
+        // do a check for boostin
+        dat->end_of_flight_debouncer =
+            GroundLevelDebouncer{5000, dat->ground_level_avger.avg() + 100}; // TODO use not magic numbers for this
+        // ALSO TODO update debouncer to have in range and stable (value doesnt differ by range in time period)
+
+        // also solves boost
+        // boost is when altitude is not stable by 500ft in 2 seconds
+        //
+
         return;
     }
-    // if (dat->nodeover_debouncer.passed()) {
-    // printk("PASSED\n");
-    // }
-    if (dat->samples % 10 == 0) {
-        printk("%f, %f, %f, %d\n", time, alt, (double) vel, (int) dat->noseover_debouncer.passed());
+    if (current_phase == Phase::UnderMain) {
+        dat->main_debouncer.feed(time_ms, agl_alt);
+        if (dat->main_debouncer.passed()) {
+            Event ev = {.typ = EventType::Main, .source = dat->self};
+            Timestamped<Event> tev = {.time = time_ms, .value = ev};
+            int err = zbus_chan_pub(&events_chan, &tev, K_SECONDS(1));
+            if (err != 0) {
+                LOG_ERR("Failed to send main event");
+            }
+        }
+        return;
+    }
+    // line fit is invalid until we have window_size samples
+    dat->summer_samples++;
+    if (dat->summer_samples < window_size + 1) {
+        return;
+    }
+
+    Line l = find_line(dat->line_fitting_summer);
+    FeetPerSec vel = l.m;
+
+    dat->noseover_debouncer.feed(time_ms, vel);
+
+    // we nosen over
+    if (current_phase == Phase::Coasting && dat->noseover_debouncer.passed()) {
+        Event ev;
+        ev.source = dat->self;
+        ev.typ = EventType::Noseover;
+        Timestamped<Event> tev = {.time = time_ms, .value = ev};
+        printk("here\n");
+
+        int err = zbus_chan_pub(&events_chan, &tev, K_SECONDS(1));
+        if (err != 0) {
+            LOG_ERR("Failed to write noseover event");
+        }
     }
 
     // LOG_INF("From listener -> telem p=%f, t=%f", (double) telem->value.press, (double) telem->value.temp);
@@ -76,18 +151,15 @@ static void line_fitting_cb(const struct zbus_channel *chan) {
 
 ZBUS_LISTENER_DEFINE(bme_lis, line_fitting_cb);
 
-Milliseconds_u32 noseover_time = 100;
-FeetPerSec_f32 noseover_velocity = 10;
-
-LineFittingCBData bmecbd{
+AltimCBData bmecbd{
     .label = "bme280",
-    .summer = RollingSum<SampleType, window_size>{},
-    .noseover_debouncer = NoseoverDebouncerT{noseover_time, noseover_velocity},
+    .self = SensorType::BME280,
+    .ground_level_avger = GLAvger{0.0},
+    .line_fitting_summer = RollingSum<SampleType, window_size>{LinearFitSample<Scalar>{}},
+    .noseover_debouncer = NoseoverDebouncerT{0, 0},
+    .main_debouncer = MainHeightDebouncer{0, 0},
+    .end_of_flight_debouncer = GroundLevelDebouncer{0, 0}, // TODO make these defaults
 };
-// LineFittingCBData mscbd{
-// .label = "ms5611",
-// .summer = RollingSum<SampleType, window_size>{},
-// };
 
 ZBUS_CHAN_DEFINE(bme_telem_chan,                                               /* Name */
                  Timestamped<altim_telem>,                                     /* Message type */
@@ -96,16 +168,16 @@ ZBUS_CHAN_DEFINE(bme_telem_chan,                                               /
                  ZBUS_OBSERVERS(bme_lis),                                      /* observers */
                  ZBUS_MSG_INIT(Timestamped<altim_telem>{0, altim_telem{0, 0}}) /* Initial value {0} */
 );
-// ZBUS_CHAN_DEFINE(bme_telem_chan,         /* Name */
-//  Timestamped<bme_telem>, /* Message type */
-//
-//  NULL,                                                     /* Validator */
-//  &mscbd,                                                   /* User Data */
-//  ZBUS_OBSERVERS(foo_lis),                                  /* observers */
-//  ZBUS_MSG_INIT(Timestamped<bme_telem>{0, bme_telem{0, 0}}) /* Initial value {0} */
-// );
 
 int main() {
+    Feet main_height = 500;
+    Milliseconds_u32 main_time = 100;
+
+    FeetPerSec noseover_velocity = 10;
+    Milliseconds_u32 noseover_time = 100;
+
+    bmecbd.noseover_debouncer = NoseoverDebouncerT{noseover_time, noseover_velocity};
+    bmecbd.main_debouncer = MainHeightDebouncer{main_time, main_height};
 
     int i = 0;
     while (true) {
@@ -124,8 +196,12 @@ int main() {
         if (err < 0) {
             printk("err getting");
         }
-
         uint64_t ms = k_uptime_get();
+        if (ms > 3860 && current_phase == Phase::Boostin) {
+            current_phase = Phase::Coasting;
+        } else if (ms > 2000 && current_phase == Phase::Pad) {
+            current_phase = Phase::Boostin;
+        }
 
         Timestamped<altim_telem> telem = {};
         telem.time = ms;
