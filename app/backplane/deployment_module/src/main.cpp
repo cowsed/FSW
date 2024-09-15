@@ -19,9 +19,9 @@ using GLAvger = MovingAvg<Feet, gl_window_size>;
 static constexpr std::size_t window_size = 10;
 using SummerType = RollingSum<SampleType, window_size>;
 
-using NoseoverDebouncerT = Debuouncer<ThresholdDirection::Under, Scalar>;
-using MainHeightDebouncer = Debuouncer<ThresholdDirection::Under, Scalar>;
-using GroundLevelDebouncer = Debuouncer<ThresholdDirection::Under, Scalar>;
+using NoseoverDebouncerT = Debuouncer<ThresholdDirection::Under, FeetPerSec>;
+using MainHeightDebouncer = Debuouncer<ThresholdDirection::Under, Feet>;
+using GroundLevelDebouncer = Debuouncer<ThresholdDirection::Under, FeetPerSec>;
 
 Feet calc_alt(KiloPa press_kpa, Celsius temp_c) {
     Scalar pressure = press_kpa * 10;
@@ -44,7 +44,9 @@ Line find_line(const SummerType &summer) {
 }
 
 static void do_state_transition(const struct zbus_channel *chan) { printk("who up transitioning they state"); }
+
 ZBUS_LISTENER_DEFINE(state_transition_lis, do_state_transition);
+
 bool event_validator(const void *msg, size_t msg_size) {
     auto ev = (Timestamped<Event> *) msg;
     printk("Sending State: %d from %d\n", (int) ev->value.typ, (int) ev->value.source);

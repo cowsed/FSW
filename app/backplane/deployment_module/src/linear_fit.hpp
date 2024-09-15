@@ -5,16 +5,16 @@
 
 template <typename T, std::size_t len> class RollingSum {
   public:
-    static_assert(len > 0, "What is the sum of 0 elements?");
+    static_assert(len > 0, "What is the sum of 0 elements? You probably don't want this (also it will break)");
 
     using value_type = T;
     static constexpr std::size_t size_ = len;
 
-    RollingSum(T start) : buf(start) { fill(start); }
+    constexpr RollingSum(T start) : buf(start) { fill(start); }
 
     constexpr std::size_t size() const { return size_; }
 
-    void fill(const value_type &start) {
+    constexpr void fill(const value_type &start) {
         buf.fill(start);
         total = buf.oldest_sample();
         for (std::size_t i = 1; i < buf.size(); i++) {
@@ -22,13 +22,13 @@ template <typename T, std::size_t len> class RollingSum {
         }
     }
 
-    void feed(value_type value) {
+    constexpr void feed(const value_type &new_value) {
         value_type oldest = buf.oldest_sample();
         total = total - oldest;
-        total = total + value;
-        buf.add_sample(value);
+        total = total + new_value;
+        buf.add_sample(new_value);
     }
-    value_type sum() const { return total; }
+    constexpr value_type sum() const { return total; }
 
   private:
     value_type total;
@@ -40,11 +40,11 @@ template <typename T, std::size_t len> class MovingAvg {
     using value_type = T;
     static constexpr std::size_t length = len;
 
-    MovingAvg(value_type start) : summer(start) {}
+    constexpr MovingAvg(value_type start) : summer(start) {}
 
-    void feed(value_type value) { summer.feed(value); }
-    value_type avg() { return summer.sum() / (value_type) len; }
-    void fill(const T &start) { summer.fill(start); }
+    constexpr void feed(value_type value) { summer.feed(value); }
+    constexpr value_type avg() { return summer.sum() / (value_type) len; }
+    constexpr void fill(const T &start) { summer.fill(start); }
 
   private:
     RollingSum<value_type, len> summer;
