@@ -10,12 +10,12 @@ template <typename T, std::size_t len> class RollingSum {
     using value_type = T;
     static constexpr std::size_t size_ = len;
 
-    RollingSum(T start) : buf(start) { setup(start); }
+    RollingSum(T start) : buf(start) { fill(start); }
 
     constexpr std::size_t size() const { return size_; }
 
-    void setup(value_type start) {
-        buf.reset(start);
+    void fill(const value_type &start) {
+        buf.fill(start);
         total = buf.oldest_sample();
         for (std::size_t i = 1; i < buf.size(); i++) {
             total = total + buf[1];
@@ -44,7 +44,7 @@ template <typename T, std::size_t len> class MovingAvg {
 
     void feed(value_type value) { summer.feed(value); }
     value_type avg() { return summer.sum() / (value_type) len; }
-    void setup(T start) { summer.setup(start); }
+    void fill(const T &start) { summer.fill(start); }
 
   private:
     RollingSum<value_type, len> summer;

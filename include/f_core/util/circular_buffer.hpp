@@ -5,9 +5,9 @@ template <typename ValueT, std::size_t Length> class CircularBuffer {
   public:
     using value_type = ValueT;
     static constexpr std::size_t size_ = Length;
-    CircularBuffer(value_type initial_value) { reset(initial_value); }
+    CircularBuffer(value_type initial_value) { fill(initial_value); }
 
-    void reset(const value_type &value) { underlying.fill(value); }
+    void fill(const value_type &value) { underlying.fill(value); }
 
     void add_sample(value_type value) {
         underlying[oldest_index] = value;
