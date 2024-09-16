@@ -19,7 +19,7 @@ using GLAvger = MovingAvg<Feet, gl_window_size>;
 static constexpr std::size_t window_size = 10;
 using SummerType = RollingSum<SampleType, window_size>;
 
-using NoseoverDebouncerT = Debuouncer<ThresholdDirection::Under, FeetPerSec>;
+using NoseoverDebouncer = Debuouncer<ThresholdDirection::Under, FeetPerSec>;
 using MainHeightDebouncer = Debuouncer<ThresholdDirection::Under, Feet>;
 using GroundLevelDebouncer = Debuouncer<ThresholdDirection::Under, FeetPerSec>;
 
@@ -78,13 +78,22 @@ struct AltimCBData {
     GLAvger ground_level_avger;
 
     SummerType line_fitting_summer;
-    NoseoverDebouncerT noseover_debouncer;
+    NoseoverDebouncer noseover_debouncer;
     int summer_samples = 0; // we need to get at least window_size samples before any of our data is valid
 
     MainHeightDebouncer main_debouncer;
 
     GroundLevelDebouncer end_of_flight_debouncer;
 };
+
+void handle_altim_pad(const Timestamped<altim_telem> *msg, AltimCBData *data, Milliseconds_u32 time_ms, Feet agl_alt) {}
+void handle_altim_boosting(const Timestamped<altim_telem> *msg, AltimCBData *data, Milliseconds_u32 time_ms,
+                           Feet agl_alt) {}
+
+using altim_callback = void (*)(const Timestamped<altim_telem> *msg, AltimCBData *data, Milliseconds_u32 time_ms,
+                                Feet agl_alt);
+
+static altim_callback altim_callbacks[] = {[Phase::Pad] = handle_altim_pad, [Phase::Boostin] = handle_altim_boosting};
 
 static void line_fitting_cb(const struct zbus_channel *chan) {
     const Timestamped<altim_telem> *telem = (Timestamped<altim_telem> *) zbus_chan_const_msg(chan);
@@ -100,9 +109,6 @@ static void line_fitting_cb(const struct zbus_channel *chan) {
     if (current_phase == Phase::Pad) {
         dat->ground_level_avger.feed(asl_alt);
 
-        // do a check for boostin
-        dat->end_of_flight_debouncer =
-            GroundLevelDebouncer{5000, dat->ground_level_avger.avg() + 100}; // TODO use not magic numbers for this
         // ALSO TODO update debouncer to have in range and stable (value doesnt differ by range in time period)
 
         // also solves boost
@@ -158,7 +164,7 @@ AltimCBData bmecbd{
     .self = SensorType::BME280,
     .ground_level_avger = GLAvger{0.0},
     .line_fitting_summer = RollingSum<SampleType, window_size>{LinearFitSample<Scalar>{}},
-    .noseover_debouncer = NoseoverDebouncerT{0, 0},
+    .noseover_debouncer = NoseoverDebouncer{0, 0},
     .main_debouncer = MainHeightDebouncer{0, 0},
     .end_of_flight_debouncer = GroundLevelDebouncer{0, 0}, // TODO make these defaults
 };
