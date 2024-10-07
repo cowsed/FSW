@@ -68,3 +68,6 @@ zephyr-windows.code-workspace
 flash.bin
 app_grim_reefer/extra/out/*
 *.pyc
+
+# Python files
+__pycache__
