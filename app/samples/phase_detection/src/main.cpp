@@ -45,7 +45,7 @@ void barom_thread_f(void *, void *, void *) {
     if (!barometer.IsReady()) {
         LOG_WRN("Accelerometer not ready");
     }
-    controller.SubmitEvent(Sources::BAROM1, Events::PadReady);
+    controller.SubmitEvent(Sources::Barom1, Events::PadReady);
     controller.WaitUntilEvent(Events::PadReady);
 
     while (true) {
@@ -64,32 +64,15 @@ K_THREAD_DEFINE(barom_thread, 1024, barom_thread_f, NULL, NULL, NULL, 0, 0, 0);
 // mabye add Source to that so you can name and differentiate things that way
 // coast only happens after boost with lockout of 1second
 // Timer for boost ending
-constexpr k_timeout_t boost_to_coast_time = K_SECONDS(3);
-void boost_to_coast_timer_expire(struct k_timer *) { controller.SubmitEvent(Sources::TIMERS, Events::Coast); }
-K_TIMER_DEFINE(boost_to_coast_timer, boost_to_coast_timer_expire, NULL);
-
-// Timer for noseover to main
-constexpr k_timeout_t noseover_to_main_time = K_SECONDS(5);
-void noseover_to_main_timer_expire(struct k_timer *) { controller.SubmitEvent(Sources::TIMERS, Events::MainChute); }
-K_TIMER_DEFINE(noseover_to_main_timer, noseover_to_main_timer_expire, NULL);
-
-// Full Flight Time
-constexpr k_timeout_t full_flight_time = K_SECONDS(10);
-void full_flight_timer_expire(struct k_timer *) { controller.SubmitEvent(Sources::TIMERS, Events::GroundHit); }
-K_TIMER_DEFINE(full_flight_timer, full_flight_timer_expire, NULL);
-
-// Extra Camera Time
-constexpr k_timeout_t extra_camera_time = K_SECONDS(2);
-void extra_camera_timer_expire(struct k_timer *) { controller.SubmitEvent(Sources::TIMERS, Events::FlightOver); }
-K_TIMER_DEFINE(extra_camera_timer, extra_camera_timer_expire, NULL);
 
 int main() {
     LOG_DBG("Waiting until everyone ready");
     controller.SubmitEvent(Sources::IMU2, Events::PadReady); // mocking this cuz i cant be bothered to double it
 
     controller.WaitUntilEvent(Events::PadReady);
-    LOG_DBG("System ready");
+    LOG_DBG("System ready:\n\tstart boost detecting");
 
+    // Start sensing
     k_timer_start(&imu_timer, K_MSEC(1), K_MSEC(1));
     k_timer_start(&barom_timer, K_MSEC(10), K_MSEC(10));
 
@@ -97,40 +80,35 @@ int main() {
     {
         controller.SubmitEvent(Sources::IMU1, Events::Boost);
         controller.SubmitEvent(Sources::IMU2, Events::Boost);
-        controller.WaitUntilEvent(Events::Boost);
+        controller.SubmitEvent(Sources::Barom1, Events::Boost);
     }
 
-    LOG_DBG("Boost detected");
-    k_timer_start(&full_flight_timer, full_flight_time, K_NO_WAIT);
-    k_timer_start(&boost_to_coast_timer, boost_to_coast_time, K_NO_WAIT);
+    controller.WaitUntilEvent(Events::Boost);
+    LOG_DBG("Boost detected:\n\ttell your friends (engineering cams)");
 
     controller.WaitUntilEvent(Events::Coast);
-    LOG_DBG("Coast detected");
+    LOG_DBG("Coast detected:\n\tturn down IMU data rate");
 
     // IMU can chill out
     k_timer_start(&imu_timer, K_MSEC(10), K_MSEC(10));
 
     // Mock Noseover
-    controller.SubmitEvent(Sources::BAROM1, Events::Noseover);
+    controller.SubmitEvent(Sources::Barom1, Events::Noseover);
 
     controller.WaitUntilEvent(Events::Noseover);
-    k_timer_start(&noseover_to_main_timer, noseover_to_main_time, K_NO_WAIT);
-    LOG_DBG("Noseover detected");
-
-    k_timer_start(&noseover_to_main_timer, noseover_to_main_time, K_NO_WAIT);
+    LOG_DBG("Noseover detected:\n\tdeploy charges");
 
     controller.WaitUntilEvent(Events::MainChute);
-    LOG_DBG("Main Chute Deploy");
+    LOG_DBG("Main Chute Deploy:\n\tdeploy more charges");
 
     controller.WaitUntilEvent(Events::GroundHit);
-    LOG_DBG("Hit The ground");
-    k_timer_start(&extra_camera_timer, extra_camera_time, K_NO_WAIT);
+    LOG_DBG("Hit The ground: Stop\n\trecording data");
 
-    // Can stop recording
+    // Stop recording
     k_timer_stop(&imu_timer);
     k_timer_stop(&barom_timer);
 
-    controller.WaitUntilEvent(Events::FlightOver);
-    LOG_DBG("Flight over ");
+    controller.WaitUntilEvent(Events::CamerasOff);
+    LOG_DBG("Flight over:\n\tTurn off cameras");
     return 0;
 }
