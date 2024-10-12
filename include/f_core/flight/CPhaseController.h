@@ -1,12 +1,12 @@
+#pragma once
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <zephyr/kernel.h>
 
 void flight_log_init();
-void flight_log_source_event(const char *source, const char *event) { printf("%-10s from %s\n", event, source); }
-void flight_log_event_confirmed(const char *event, bool current_state) {
-    printf("%-10s confirmed%s\n", event, current_state ? " but already happened. Not dispatching" : "");
-}
+void flight_log_source_event(const char *source, const char *event);
+void flight_log_event_confirmed(const char *event, bool current_state);
 
 template <typename EventID, std::size_t num_events, typename SourceID, std::size_t num_sources> class PhaseController {
   public:
@@ -42,8 +42,12 @@ template <typename EventID, std::size_t num_events, typename SourceID, std::size
     }
 
     // Dealing with state
-    bool HasEventOccured(EventID event);
-    void WaitUntilEvent(EventID);
+    bool HasEventOccured(EventID event) { return event_states[event]; }
+    void WaitUntilEvent(EventID event) {
+        while (event_states[event] == false) {
+            k_msleep(1);
+        }
+    }
 
     // Current State of the system
     std::array<SourceStates, num_events> source_states = {false};

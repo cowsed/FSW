@@ -30,23 +30,6 @@
         temp-noise = <100>; // millicelsius
         pressure-noise = <100>; // pascals
     };
-
-    gnss: gnss{
-        status = "okay";
-        compatible = "openrocket,gnss";
-        lag-time-us = <1000>;
-        sampling-period-us = <(5*1000*1000)>;
-        rtc = <&rtc>;
-    };
-
-    magn: magn{
-        status = "okay";
-        compatible = "openrocket,magnetometer";
-        lag-time-us = <1000>;
-        sampling-period-us = <(5*1000*1000)>;
-        noise = <1000>;
-    };
-
 };
 &rtc {
     status = "okay";
