@@ -22,6 +22,9 @@ LOG_MODULE_REGISTER(main, CONFIG_APP_PHASE_DETECT_LOG_LEVEL);
 K_TIMER_DEFINE(imu_timer, NULL, NULL);
 K_TIMER_DEFINE(barom_timer, NULL, NULL);
 
+extern void do_storage();
+Controller controller{sourceNames, eventNames, timer_events, deciders};
+
 void imu_thread_f(void *, void *, void *) {
     CAccelerometer acc(*DEVICE_DT_GET_ONE(openrocket_imu));
     if (!acc.IsReady()) {
@@ -85,6 +88,7 @@ int main() {
 
     controller.WaitUntilEvent(Events::Boost);
     LOG_DBG("Boost detected:\n\ttell your friends (engineering cams)");
+    do_storage();
 
     controller.WaitUntilEvent(Events::Coast);
     LOG_DBG("Coast detected:\n\tturn down IMU data rate");

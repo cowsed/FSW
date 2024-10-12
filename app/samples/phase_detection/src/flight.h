@@ -25,19 +25,20 @@ enum Sources : uint8_t {
     ExtraCameraTimer,
     NumSources
 };
-constexpr std::array<const char *, Sources::NumSources> sourceNames = {
+inline constexpr std::array<const char *, Sources::NumSources> sourceNames = {
     "IMU 1 (LSM6DSL)",   "IMU 2 (ADXL375)",     "Barom 1 (BME280)",  "Noseover Lockout",
     "Boost2Coast Timer", "Noseover2Main Timer", "Full Flight Timer", "ExtraCamera Timer",
 };
 
-constexpr std::size_t num_timer_events = 5;
+inline constexpr std::size_t num_timer_events = 5;
 using Controller = PhaseController<Events, Events::NumEvents, Sources, Sources::NumSources, num_timer_events>;
 
 /**
  * Special events triggered not by sensors but by timers between phases
  */
-constexpr std::array<Controller::TimerEvent, num_timer_events> timer_events = {
-    // The engine should burn for around 3 seconds. don't detect coast unless the engine has been firing for a bit
+inline constexpr std::array<Controller::TimerEvent, num_timer_events> timer_events = {
+    // The engine should burn for around X seconds. don't detect coast unless the engine has been firing for a bit
+    // Can be implemented as a lockout or as another way of progressing states
     Controller::TimerEvent{
         .start = Events::Boost,
         .event = Events::Coast,
@@ -82,7 +83,7 @@ constexpr std::array<Controller::TimerEvent, num_timer_events> timer_events = {
  * silly immediatly invoked lambda because c++ doesnt support designtaed array initializers :(
  * still constexpr tho which is nice
  */
-constexpr std::array<Controller::DecisionFunc, Events::NumEvents> deciders = [] {
+inline constexpr std::array<Controller::DecisionFunc, Events::NumEvents> deciders = [] {
     std::array<Controller::DecisionFunc, Events::NumEvents> arr = {nullptr};
     // Ready to go
     arr[Events::PadReady] = [](Controller::SourceStates states) -> bool {
@@ -119,5 +120,3 @@ constexpr std::array<Controller::DecisionFunc, Events::NumEvents> deciders = [] 
 
     return arr;
 }();
-
-Controller controller{sourceNames, eventNames, timer_events, deciders};
