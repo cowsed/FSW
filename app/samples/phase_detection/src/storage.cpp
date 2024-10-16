@@ -2,4 +2,4 @@
 
 #include <zephyr/kernel.h>
 
-void do_storage() { printk("stage %d", (int) Events::Noseover); }
+// void do_storage() { printk("stage %d\n", (int) Events::Noseover); }

@@ -19,8 +19,8 @@ using GLAvger = MovingAvg<Feet, gl_window_size>;
 static constexpr std::size_t window_size = 10;
 using SummerType = RollingSum<SampleType, window_size>;
 
-using NoseoverDebouncer = Debuouncer<ThresholdDirection::Under, FeetPerSec>;
-using MainHeightDebouncer = Debuouncer<ThresholdDirection::Under, Feet>;
+using NoseoverDebouncerT = Debuouncer<ThresholdDirection::Under, FeetPerSec>;
+using MainHeightDebouncerT = Debuouncer<ThresholdDirection::Under, Feet>;
 using GroundLevelDebouncer = Debuouncer<ThresholdDirection::Under, FeetPerSec>;
 
 Feet calc_alt(KiloPa press_kpa, Celsius temp_c) {
@@ -78,10 +78,10 @@ struct AltimCBData {
     GLAvger ground_level_avger;
 
     SummerType line_fitting_summer;
-    NoseoverDebouncer noseover_debouncer;
+    NoseoverDebouncerT noseover_debouncer;
     int summer_samples = 0; // we need to get at least window_size samples before any of our data is valid
 
-    MainHeightDebouncer main_debouncer;
+    MainHeightDebouncerT main_debouncer;
 
     GroundLevelDebouncer end_of_flight_debouncer;
 };
@@ -164,8 +164,8 @@ AltimCBData bmecbd{
     .self = SensorType::BME280,
     .ground_level_avger = GLAvger{0.0},
     .line_fitting_summer = RollingSum<SampleType, window_size>{LinearFitSample<Scalar>{}},
-    .noseover_debouncer = NoseoverDebouncer{0, 0},
-    .main_debouncer = MainHeightDebouncer{0, 0},
+    .noseover_debouncer = NoseoverDebouncerT{0, 0},
+    .main_debouncer = MainHeightDebouncerT{0, 0},
     .end_of_flight_debouncer = GroundLevelDebouncer{0, 0}, // TODO make these defaults
 };
 

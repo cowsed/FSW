@@ -16,7 +16,6 @@ constexpr std::array<const char *, Events::NumEvents> eventNames = {
  */
 enum Sources : uint8_t {
     IMU1,
-    IMU2,
     Barom1,
     NoseoverLockout,
     Boost2CoastTimer,
@@ -26,8 +25,8 @@ enum Sources : uint8_t {
     NumSources
 };
 inline constexpr std::array<const char *, Sources::NumSources> sourceNames = {
-    "IMU 1 (LSM6DSL)",   "IMU 2 (ADXL375)",     "Barom 1 (BME280)",  "Noseover Lockout",
-    "Boost2Coast Timer", "Noseover2Main Timer", "Full Flight Timer", "ExtraCamera Timer",
+    "IMU 1 (LSM6DSL)",     "Barom 1 (BME280)",  "Noseover Lockout",  "Boost2Coast Timer",
+    "Noseover2Main Timer", "Full Flight Timer", "ExtraCamera Timer",
 };
 
 inline constexpr std::size_t num_timer_events = 5;
@@ -38,11 +37,11 @@ using Controller = PhaseController<Events, Events::NumEvents, Sources, Sources::
  */
 inline constexpr std::array<Controller::TimerEvent, num_timer_events> timer_events = {
     // The engine should burn for around X seconds. don't detect coast unless the engine has been firing for a bit
-    // Can be implemented as a lockout or as another way of progressing states
+    // Can be implemented as a lockout or as another way of progressing states if you don't want to do unboost detection
     Controller::TimerEvent{
         .start = Events::Boost,
         .event = Events::Coast,
-        .time = K_SECONDS(3),
+        .time = K_SECONDS(2),
         .source = Sources::Boost2CoastTimer,
     },
     // We dont want to accidentally detect noseover when still burning or while going really fast.
@@ -65,7 +64,7 @@ inline constexpr std::array<Controller::TimerEvent, num_timer_events> timer_even
     Controller::TimerEvent{
         .start = Events::Boost,
         .event = Events::GroundHit,
-        .time = K_SECONDS(10),
+        .time = K_SECONDS(200),
         .source = Sources::FullFlightTimer,
     },
     // After we hit the ground, keep the cameras going for a while longer so they start a new video file and when we cut the power, no actual flight footage is lost
@@ -87,17 +86,17 @@ inline constexpr std::array<Controller::DecisionFunc, Events::NumEvents> decider
     std::array<Controller::DecisionFunc, Events::NumEvents> arr = {nullptr};
     // Ready to go
     arr[Events::PadReady] = [](Controller::SourceStates states) -> bool {
-        return states[Sources::IMU1] && states[Sources::IMU2] && states[Sources::Barom1];
+        return states[Sources::IMU1] && states[Sources::Barom1];
     };
 
     // Boosting
     arr[Events::Boost] = [](Controller::SourceStates states) -> bool {
-        return (states[Sources::IMU1] && states[Sources::IMU2]) || states[Sources::Barom1];
+        return (states[Sources::IMU1] || states[Sources::Barom1]);
     };
 
     // Coasting
     arr[Events::Coast] = [](Controller::SourceStates states) -> bool {
-        return states[Sources::Boost2CoastTimer] || states[Sources::IMU1] || states[Sources::IMU2];
+        return states[Sources::Boost2CoastTimer] || states[Sources::IMU1];
     };
 
     // Noseover
@@ -107,7 +106,7 @@ inline constexpr std::array<Controller::DecisionFunc, Events::NumEvents> decider
 
     // Main
     arr[Events::MainChute] = [](Controller::SourceStates states) -> bool {
-        return states[Sources::Barom1] || states[Sources::Noseover2MainTimer];
+        return states[Sources::Barom1]; // || states[Sources::Noseover2MainTimer];
     };
 
     // On the ground

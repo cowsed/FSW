@@ -7,11 +7,12 @@
 
     imu: imu {
         status = "okay";
+        // broken;
         compatible = "openrocket,imu";
         vertical-axis = "OPENROCKET_AXIS_Z";
         vertical-axis-invert;
         lateral-axis = "OPENROCKET_AXIS_X";
-        lag-time-us = <1000>;
+        lag-time-us = <10>;
         sampling-period-us = <10>;
 
         roll-axis = "OPENROCKET_AXIS_Z";
@@ -28,7 +29,7 @@
         lag-time-us = <1000>;
         sampling-period-us = <10>;
         temp-noise = <100>; // millicelsius
-        pressure-noise = <100>; // pascals
+        pressure-noise = <10>; // pascals
     };
 };
 &rtc {
