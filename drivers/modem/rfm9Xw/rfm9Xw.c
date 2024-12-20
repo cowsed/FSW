@@ -719,6 +719,10 @@ int32_t set_modulation_shaping(const struct rfm9Xw_config *config, enum RfmModul
                          (shaping & RFM_REG_PA_RAMP_MASK_MODULATION_SHAPING) | (ramp & RFM_REG_PA_RAMP_MASK_PA_RAMP));
 }
 
+struct note {
+    int note;
+    int len;
+};
 int32_t rfm9x_dostuff(const struct device *dev) {
     LOG_INF("Hello im the driver");
     const struct rfm9Xw_config *config = dev->config;
@@ -731,29 +735,110 @@ int32_t rfm9x_dostuff(const struct device *dev) {
 
     set_frequency(config, data->carrier_freq);
     set_power_amplifier(config, config->power_amplifier, data->max_power, data->output_power);
-    set_pramble_len(config, 0);
-    set_frequency_deviation(config, 00);
+    // set_pramble_len(config, 3);
 
-    write_rfm_reg(config, REG_PA_RAMP, 0b00101001);
-    set_modulation_shaping(config, data->modulation_shaping, data->pa_ramp);
+    uint16_t fdev = 50000;
+    set_frequency_deviation(config, fdev);
 
-    for (int i = 0; i < 1000; i++) {
-        uint8_t regopmode_val = make_regopmode_fsk(data->long_range_mode, RfmModulationType_FSK,
-                                                   data->low_frequency_mode, RfmTransceiverMode_FsModeTx);
+    set_modulation_shaping(config, RfmModulationShaping_FSK_GaussianBT_0_3, data->pa_ramp);
+    // set_bitrate(config, 20000);
+    uint8_t regopmode_val = make_regopmode_fsk(data->long_range_mode, RfmModulationType_FSK, data->low_frequency_mode,
+                                               RfmTransceiverMode_FsModeTx);
 
-        res = write_rfm_reg(config, REG_OP_MODE, regopmode_val);
-        set_bitrate(config, 1200 + (i % 20) * 120);
-        regopmode_val = make_regopmode_fsk(data->long_range_mode, RfmModulationType_FSK, data->low_frequency_mode,
-                                           RfmTransceiverMode_Transmitter);
+    res = write_rfm_reg(config, REG_OP_MODE, regopmode_val);
 
-        res = write_rfm_reg(config, REG_OP_MODE, regopmode_val);
-        k_msleep(50000);
+    k_msleep(1);
+    regopmode_val = make_regopmode_fsk(data->long_range_mode, RfmModulationType_FSK, data->low_frequency_mode,
+                                       RfmTransceiverMode_Transmitter);
+    res = write_rfm_reg(config, REG_OP_MODE, regopmode_val);
+
+    int Eb6 = 1244;
+    int E6 = 1318;
+    int F6 = 1396;
+    int Gb6 = 1480;
+    int G6 = 1568;
+    int Ab6 = 1661;
+    int A6 = 1760;
+    int Bb6 = 1864;
+    int B6 = 1975;
+    int C7 = 2093;
+    int Db7 = 2217;
+    int D7 = 2349;
+    int Eb7 = 2 * Eb6;
+    int E7 = 2 * E6;
+    int F7 = 2 * F6;
+    int Fs7 = 2 * Gb6;
+    int Gb7 = 2 * Gb6;
+    int G7 = 2 * G6;
+    int A7 = 2 * A6;
+    int Bb7 = 2 * Bb6;
+    int B7 = 2 * B6;
+    int C8 = 2 * C7;
+    int scale[8] = {C7, D7, E7, F7, G7, A7, B7, C8};
+    int quarter_bpm = 140; // bpm
+    int quarter = 60000 / quarter_bpm;
+    int third_eighth = quarter / 3;
+    int eighth_one = third_eighth * 2;
+    int eighth_two = third_eighth;
+    // clang-format off
+    struct note song[] = {
+        // I dont want a lot for christmas
+        {G6, quarter}, // I
+        {B6, quarter},  // Dont
+        {D7, quarter},  // want
+        {Fs7, eighth_one},  // a 
+        {G7, eighth_two+eighth_one}, // lot 
+        {Fs7, eighth_two + quarter},  // for 
+        {E7, eighth_one}, // christ
+        {D7, eighth_two+quarter}, // mas
+        // There is just one thing
+        {A7, quarter}, // there
+        {G7, quarter}, // is
+        {G7, eighth_one}, // just
+        {Fs7, quarter}, // one
+        {G7, quarter}, // thing
+        {Fs7, quarter}, // i 
+        {E7, eighth_two},// need
+        {D7, quarter},
+        // and i dont care about the presents
+        {D7, eighth_one},// and
+        {C7, eighth_two+quarter}, // i 
+        {E7, quarter},// dont
+        {G7, quarter}, //care
+        {A7, eighth_one}, // a
+        {B7, quarter},//bout
+        {A7, quarter}, // the
+        {G7, quarter}, //pres
+        {E7, eighth_two+quarter}, //ents
+        // underneath the christmas tree
+        {C7, quarter}, // un
+        {Eb7, eighth_one}, //der
+        {G7, eighth_two + quarter}, //neath
+        {A7, eighth_one}, // the
+        {Bb7, quarter},
+        {A7, quarter},
+        {F7, quarter},
+        {Eb7, quarter},
+    };
+    // clang-format on
+    for (int i = 0; i < sizeof(song) / sizeof(song[0]); i++) {
+        int note_freq = song[i].note;
+        int note_len = song[i].len;
+        set_bitrate(config, note_freq);
+        set_frequency_deviation(config, fdev);
+        k_msleep(note_len);
+
+        for (int j = 0; j < 100; j++) {
+            set_frequency_deviation(config, fdev - j * 50);
+            k_usleep(20);
+        }
     }
-    if (res < 0) {
-        LOG_ERR("Error writing reg");
-    } else {
-        LOG_INF("Wrote Reg");
-    }
+
+    regopmode_val = make_regopmode_fsk(data->long_range_mode, RfmModulationType_FSK, data->low_frequency_mode,
+                                       RfmTransceiverMode_FsModeTx);
+    res = write_rfm_reg(config, REG_OP_MODE, regopmode_val);
+
+    // set_frequency_deviation(config, (i % 2 == 0) ? 50000 : 10000);
 
     dump_registers(config);
 

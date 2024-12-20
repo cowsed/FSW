@@ -131,6 +131,7 @@ properties:
     default: "RfmModulationShaping_FSK_NoShaping"
     description: |
       i shape a da modulations
+      https://en.wikipedia.org/wiki/Pulse_shaping
     enum:
       - RfmModulationShaping_FSK_NoShaping
       - RfmModulationShaping_FSK_GaussianBT_1_0
@@ -144,7 +145,7 @@ properties:
     default: "RfmPaRamp_40us"
     description: |
       Controls the ramp time of the power amplifier. Datasheet Section 4.2.2.3
-      When used, the PA bias voltages are ramped smoothly up and down to reduce spectral splatter (switch noise).
+      When used, the PA bias voltages are ramped smoothly up and down to reduce spectral splatter (switch noise) https://en.wikipedia.org/wiki/Spectral_splatter
       This setting can be reconfigured at runtime but the transmitter must be restarted for the changes to take effect.
     enum:
       - "RfmPaRamp_3400us"
@@ -199,6 +200,7 @@ properties:
       This encoding applies to (Fact check: unknown - all parts(preamble, sync, data, crc), just data, just data and CRC)
       - RfmDcFreeEncodingType_None: No extra encoding of the  packet
       - RfmDcFreeEncodingType_Manchester: No extra encoding of the data section of a packet
+
   beacon-tx:
     type: boolean
     description: |

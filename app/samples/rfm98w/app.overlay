@@ -21,7 +21,7 @@
 		deviation-frequency = <DT_FREQ_K(100)>;
 		bitrate = <12000>;
 		modulation-type = "RfmModulationType_FSK";
-
+		modulation-shaping= "RfmModulationShaping_FSK_GaussianBT_1_0";
 		reset-gpios = <&arduino_header 5 GPIO_ACTIVE_HIGH>;
 		power-amplifier = "RfmPowerAmplifierSelection_PaBoost";
 		max-power = "RfmMaxPower_10_8_DBM";
