@@ -1,0 +1,217 @@
+# Common fields for hoperf rfm9Xw radio chips
+include: [spi-device.yaml]
+
+description: HopeRF RFM9XW radio module
+
+compatible: "hoperf,rfm9xw"
+
+properties:
+  "#io-channel-cells":
+    type: int
+    required: true
+  name:
+    type: string
+  long-range-mode:
+    type: string
+    default: "RfmLongRangeModeSetting_FskOokMode"
+    description: |
+      Long Range Mode:
+        - RfmLongRangeModeSetting_FskOokMode: Set Chip to FSK/OOK Mode
+        - RfmLongRangeModeSetting_LoraTmMode: Set Chip to LoRa (TM) Mode (Currently Unsupported)
+      This setting can be reconfigured at runtime when the chip is in standby mode (fact check this)
+    enum:
+      - "RfmLongRangeModeSetting_FskOokMode"
+      - "RfmLongRangeModeSetting_LoraTmMode"
+  modulation-type:
+    type: string
+    default: "RfmModulationType_FSK"
+    description: |
+      Modulation Type (valid only in FSK/OOK Mode):
+        - RfmModulationType_FSK: Set Chip to Frequency Shift Keying (FSK) Modulation
+        - RfmModulationType_OOK: Set Chip to On-Off-Keying (OOK)
+      This setting can be reconfigured at runtime
+    enum:
+      - "RfmModulationType_FSK"
+      - "RfmModulationType_OOK"
+  low-frequency-mode:
+    type: string
+    default: "RfmLowFrequencyMode_LowFrequency"
+    description: |
+      LowFrequencyMode (valid only in FSK/OOK Mode):
+        - RfmLowFrequencyMode_HighFrequency: Access to High Frequency test registers
+        - RfmLowFrequencyMode_LowFrequency: Access to Low Frequency test registers
+      This setting can be reconfigured at runtime
+    enum:
+      - "RfmLowFrequencyMode_HighFrequency"
+      - "RfmLowFrequencyMode_LowFrequency"
+  carrier-frequency:
+    type: int
+    required: true
+    description: |
+      Frequency of carrier wave in Hz
+      The actual range of this value depends on the specific version of the chip
+      - RFM95W: 868 - 915 MHz
+      - RFM96W: 433 - 470 MHz
+      - RFM98W: 433 - 470 MHz
+      - RFM99W: 169 MHz
+      This setting can be reconfigured at runtime
+  deviation-frequency:
+    type: int
+    description: |
+      Deviation of frequency when modulating with FSK in Hz
+      This setting can be reconfigured at runtime
+      Range 0.6 to 200 kHz
+
+  bitrate:
+    type: int
+    default: 4800
+    description: |
+      Bitrate (bits per second)of data when using FSK or OOK Modulation
+      Range (FSK): 1.2 to 300 kbps
+      Range (OOK): 1.2 to 32.768 kbps
+      This setting can be reconfigured at runtime
+
+  data-mode:
+    type: string
+    default: "RfmPacketConfigDataMode_Packet"
+    description: |
+      Data mode for the receiver. Continuous or Packet(default)
+      This setting can be reconfigured at runtime
+    enum:
+      - "RfmPacketConfigDataMode_Continuous"
+      - "RfmPacketConfigDataMode_Packet"
+
+  power-amplifier:
+    type: string
+    default: "RfmPowerAmplifierSelection_RFO"
+    description: |
+      RfmPowerAmplifierSelection_RFO:     RFO Pin: Max power of +14dBm
+      RfmPowerAmplifierSelection_PaBoost: PA_BOOST Pin: Max power of +20dBm
+      This setting can be reconfigured at runtime.
+    enum:
+      - "RfmPowerAmplifierSelection_RFO"
+      - "RfmPowerAmplifierSelection_PaBoost"
+  max-power:
+    type: string
+    default: "RfmMaxPower_13_2_DBM"
+    description: |
+      The maximum power allowed on the RFO output pins. See `output-power` for setting the actual power level
+      RfmMaxPower_10_8_DBM: 10.8 dBm
+      RfmMaxPower_11_4_DBM: 11.4 dBm
+      RfmMaxPower_12_0_DBM: 12.0 dBm
+      RfmMaxPower_12_6_DBM: 12.6 dBm
+      RfmMaxPower_13_2_DBM: 13.2 dBm
+      RfmMaxPower_13_8_DBM: 13.8 dBm
+      RfmMaxPower_14_4_DBM: 14.4 dBm
+      RfmMaxPower_15_0_DBM: 15.0 dBm
+      This setting can be reconfigured at runtime.
+    enum:
+      - "RfmMaxPower_10_8_DBM"
+      - "RfmMaxPower_11_4_DBM"
+      - "RfmMaxPower_12_0_DBM"
+      - "RfmMaxPower_12_6_DBM"
+      - "RfmMaxPower_13_2_DBM"
+      - "RfmMaxPower_13_8_DBM"
+      - "RfmMaxPower_14_4_DBM"
+      - "RfmMaxPower_15_0_DBM"
+  output-power:
+    type: int
+    default: 15
+    description: |
+      Setting for the actual output power of the RF element.
+      If using RFO pins for output (`power-amplifier = RfmPowerAmplifierSelection_RFO`), the output power is the following:
+        Pout=MaxPower-15+OutputPower
+      If using PA_BOOST pin for output (`power-amplifier = RfmPowerAmplifierSelection_PaBoost`), the output power is the following:
+        Pout=2+OutputPower
+      The allowed range of this value is 0-15.
+      This setting can be reconfigured at runtime.
+
+  modulation-shaping:
+    type: string
+    default: "RfmModulationShaping_FSK_NoShaping"
+    description: |
+      i shape a da modulations
+    enum:
+      - RfmModulationShaping_FSK_NoShaping
+      - RfmModulationShaping_FSK_GaussianBT_1_0
+      - RfmModulationShaping_FSK_GaussianBT_0_5
+      - RfmModulationShaping_FSK_GaussianBT_0_3
+      - RfmModulationShaping_OOK_NoShaping
+      - RfmModulationShaping_OOK_FCutoffBitRate
+      - RfmModulationShaping_OOK_FCutoff2xBitRate
+  pa-ramp:
+    type: string
+    default: "RfmPaRamp_40us"
+    description: |
+      Controls the ramp time of the power amplifier. Datasheet Section 4.2.2.3
+      When used, the PA bias voltages are ramped smoothly up and down to reduce spectral splatter (switch noise).
+      This setting can be reconfigured at runtime but the transmitter must be restarted for the changes to take effect.
+    enum:
+      - "RfmPaRamp_3400us"
+      - "RfmPaRamp_2000us"
+      - "RfmPaRamp_1000us"
+      - "RfmPaRamp_500us"
+      - "RfmPaRamp_250us"
+      - "RfmPaRamp_125us"
+      - "RfmPaRamp_100us"
+      - "RfmPaRamp_62us"
+      - "RfmPaRamp_50us"
+      - "RfmPaRamp_40us"
+      - "RfmPaRamp_31us"
+      - "RfmPaRamp_25us"
+      - "RfmPaRamp_20us"
+      - "RfmPaRamp_15us"
+      - "RfmPaRamp_12us"
+      - "RfmPaRamp_10us"
+
+  reset-gpios:
+    type: phandle-array
+    description: GPIO connection chip reset. If not supplied, functionality can be mimiced by physically removing power from the chip
+
+  dio0-gpios:
+    type: phandle-array
+    description: GPIO connection for DIO0. Functionality described by `dio0-mapping`
+  dio1-gpios:
+    type: phandle-array
+    description: GPIO connection for DIO1. Functionality described by `dio1-mapping`
+  dio2-gpios:
+    type: phandle-array
+    description: GPIO connection for DIO2. Functionality described by `dio2-mapping`
+  dio3-gpios:
+    type: phandle-array
+    description: GPIO connection for DIO3. Functionality described by `dio3-mapping`
+  dio4-gpios:
+    type: phandle-array
+    description: GPIO connection for DIO4. Functionality described by `dio4-mapping`
+  dio5-gpios:
+    type: phandle-array
+    description: GPIO connection for DIO5. Functionality described by `dio5-mapping`
+
+  dio0-mapping:
+    type: string
+    default: "RfmDio0Mapping_Packet_PayloadReadyPacketSent"
+    description: |
+      Mapping of DIO 0 pin. 
+      The meaning of the mapping changes depending on what mode the radio is in (Packet,Continous,LoRa)
+      Ensure that the mode here agrees with `data-mode` and `long-range-mode`.
+      If you change modes at runtime, check these mappings as well.
+      Continous Mode:
+      - RfmDio0Mapping_Continuous_SyncAddressTxReady:  SyncAddress in Rx mode, TxReady in Tx mode, Nothing in all other modes.
+      - RfmDio0Mapping_Continuous_RssiPreambleDetect:  Rssi/PreambleDetect in Rx mode, Nothing in all other modes.
+      - RfmDio0Mapping_Continuous_RxReadyTxReady:      RxReady in Rx mode, TxReady in Tx mode,  Nothing in all other modes.
+      - RfmDio0Mapping_Continuous_Nothing:             Nothing in all modes.
+      Packet Mode:
+      - RfmDio0Mapping_Packet_PayloadReadyPacketSent: PayloadReady in Rx mode, PacketSent in Tx mode, Nothing in all other modes.
+      - RfmDio0Mapping_Packet_RxCrcOk:                CrcOk in Rx mode, Nothing in all other modes.
+      - RfmDio0Mapping_Packet_Nothing:                Nothing in all modes.
+      - RfmDio0Mapping_Packet_TempChangeLowBat:       Nothing in Sleep mode, TempChange/LowBat in all other modes
+      This setting can be reconfigured at runtime
+    enum:
+      - "RfmDio0Mapping_Continuous_SyncAddressTxReady"
+      - "RfmDio0Mapping_Continuous_RssiPreambleDetect"
+      - "RfmDio0Mapping_Continuous_RxReadyTxReady"
+      - "RfmDio0Mapping_Continuous_Nothing"
+      - "RfmDio0Mapping_Packet_PayloadReadyPacketSent"
+      - "RfmDio0Mapping_Packet_RxCrcOk"
+      - "RfmDio0Mapping_Packet_Nothing"
+      - "RfmDio0Mapping_Packet_TempChangeLowBat"
