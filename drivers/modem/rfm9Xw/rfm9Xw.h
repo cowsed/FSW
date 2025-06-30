@@ -9,49 +9,19 @@ extern "C" {
 
 #include <stdint.h>
 #include <zephyr/device.h>
-
-#define RFM_MAX_NUM_DIOS 6
-
-#define REG_OP_MODE_LONG_RANGE_MODE_MASK (0b10000000)
-#define REG_OP_MODE_MODULATION_TYPE_MASK (0b01100000)
-#define REG_OP_MODE_LOW_FREQ_MODE_MASK   (0b00001000)
-#define REG_OP_MODE_TRANS_MODE_MASK      (0b00000111)
-
-#define REG_FDEV_MSB_MAX (0b00111111)
-
-#define REG_PACKET_CONFIG2_DATA_MODE_MASK (0b01000000)
-
-// Frequency synthesizer step FSTEP = FXOSC/(2^19)
-#define FXOSC_HZ                       32000000
-#define RFM_FSTEP_HZ                   61.03515625
-#define RFM_MAX_FREQUENCY_DEVIATION_HZ 999879
-
-#define RFM_BIT_RATE_FSK_BPS_MIN 1200
-#define RFM_BIT_RATE_FSK_BPS_MAX 300000
-#define RFM_BIT_RATE_OOK_BPS_MIN 1200
-#define RFM_BIT_RATE_OOK_BPS_MAX 32768
-
-#define RFM_FREQUENCY_DEVIATION_MIN 600
-#define RFM_FREQUENCY_DEVIATION_MAX 200000
-
-#define RFM99_SYNTH_MIN_HZ 137000000
-#define RFM99_SYNTH_MAX_HZ 175000000
-
-#define RFM98_SYNTH_MIN_HZ 410000000
-#define RFM98_SYNTH_MAX_HZ 525000000
-
-// // Same as 98W
-#define RFM96_SYNTH_MIN_HZ RFM98_SYNTH_MIN_HZ
-#define RFM96_SYNTH_MAX_HZ RFM98_SYNTH_MAX_HZ
-
-#define RFM95_SYNTH_MIN_HZ 862000000
-#define RFM95_SYNTH_MAX_HZ 1020000000
+#include <zephyr/kernel.h>
 
 enum RfmModelNumber {
     RfmModelNumber_95W,
     RfmModelNumber_96W,
     RfmModelNumber_98W,
     RfmModelNumber_99W,
+};
+
+enum RfmModemMode {
+    RfmModemMode_FSK,
+    RfmModemMode_OOK,
+    RfmModemMode_LoRa,
 };
 
 enum RfmLongRangeModeSetting {
@@ -87,30 +57,12 @@ enum RfmPacketConfigDataMode {
     RfmPacketConfigDataMode_Continuous = 0b00000000,
     RfmPacketConfigDataMode_Packet = 0b01000000, // Default
 };
-#define RFM_PA_CONFIG_MASK_PA_SELECT    0x80
-#define RFM_PA_CONFIG_MASK_MAX_POWER    0x70
-#define RFM_PA_CONFIG_MASK_OUTPUT_POWER 0x0f;
-#define RFM_MAX_OUTPUT_POWER            0x0f
 enum RfmPowerAmplifierSelection {
+
     // bit 7 of RegPaConfig
     RfmPowerAmplifierSelection_RFO = 0b00000000,
     RfmPowerAmplifierSelection_PaBoost = 0b10000000,
 };
-enum RfmMaxPower {
-    // bit 5-6 of RegPaConfig
-    // Controls Max Power when using the RFO pins for RF output
-    RfmMaxPower_10_8_DBM = 0x00,
-    RfmMaxPower_11_4_DBM = 0x10,
-    RfmMaxPower_12_0_DBM = 0x20,
-    RfmMaxPower_12_6_DBM = 0x30,
-    RfmMaxPower_13_2_DBM = 0x40, // Default
-    RfmMaxPower_13_8_DBM = 0x50,
-    RfmMaxPower_14_4_DBM = 0x60,
-    RfmMaxPower_15_0_DBM = 0x70,
-
-};
-
-#define RFM_REG_PA_RAMP_MASK_MODULATION_SHAPING 0b01100000
 enum RfmModulationShaping {
     RfmModulationShaping_FSK_NoShaping = 0b00000000, // Default
     RfmModulationShaping_FSK_GaussianBT_1_0 = 0b00100000,
@@ -122,7 +74,6 @@ enum RfmModulationShaping {
     RfmModulationShaping_OOK_FCutoff2xBitRate = 0b01000000,
 };
 
-#define RFM_REG_PA_RAMP_MASK_PA_RAMP 0b00001111
 enum RfmPaRamp {
     RfmPaRamp_3400us = 0b0000,
     RfmPaRamp_2000us = 0b0001,
@@ -165,8 +116,8 @@ enum RfmDio1Mapping {
 
     RfmDio1Mapping_Packet_FifoLevel = 0b000000,
     RfmDio1Mapping_Packet_FifoEmpty = 0b010000,
-    RfmDio1Mapping_Packet_Nothing = 0b100000,
-    RfmDio1Mapping_Packet_TempChangeLowBat = 0b110000,
+    RfmDio1Mapping_Packet_FifoFull = 0b100000,
+    RfmDio1Mapping_Packet_Nothing = 0b110000,
 };
 
 #define RFM_REG_DIO_MAPPING1_MASK_DIO2 0b00001100
@@ -235,11 +186,59 @@ enum RfmDcFreeEncodingType {
     RfmDcFreeEncodingType_Whitening,
 };
 
+enum RfmDioEvent {
+    RfmDioEvent_TempChange = BIT(0),
+    RfmDioEvent_LowBat = BIT(1),
+    RfmDioEvent_CrcOk = BIT(2),
+    RfmDioEvent_PayloadReady = BIT(3),
+    RfmDioEvent_PacketSent = BIT(4),
+    RfmDioEvent_FifoLevel = BIT(5),
+    RfmDioEvent_FifoFull = BIT(6),
+    RfmDioEvent_FifoEmpty = BIT(7),
+    RfmDioEvent_RxReady = BIT(8),
+    RfmDioEvent_TxReady = BIT(9),
+    RfmDioEvent_ModeReady = BIT(10),
+    RfmDioEvent_SyncAddress = BIT(11),
+    RfmDioEvent_PLLLock = BIT(12),
+    RfmDioEvent_Timeout = BIT(13),
+    RfmDioEvent_PreambleDetect = BIT(14),
+    RfmDioEvent_RSSI = BIT(15),
+
+    RfmDioEvent_Canceled = BIT(31), // Use this to wakeup active thread and release radio
+};
+
+struct rfm9Xw_fsk_modem_config {
+    enum RfmPacketConfigDataMode data_mode;
+
+    uint32_t carrier_freq;
+    uint32_t deviation_freq;
+    uint32_t bitrate;
+
+    int16_t tx_power;
+
+    enum RfmPaRamp pa_ramp;
+    enum RfmModulationShaping modulation_shaping;
+
+    uint8_t sync_word_len;
+    uint64_t sync_word;
+};
+
+struct rfm9Xw_modem_config {
+    enum RfmModemMode modem_mode;
+    union {
+        struct rfm9Xw_fsk_modem_config fsk;
+    };
+};
+
+int rfm9Xw_configure_modem(const struct device *dev, struct rfm9Xw_modem_config *cfg);
+
 /**
  * Read temperature in C
  * @param[in] dev rfm9xw device
  * @param[out] celsius temperature of radio in celsius
- * @return 0 on success. <0 on error from spi transmission
+ * @return 0 on success.
+ * @return -EAGAIN if mode is sleep or standby (temp measurement not available) 
+ * @return other <0 on error from spi transmission
  */
 int32_t rfm9xw_read_temperature(const struct device *dev, int8_t *celsius);
 
@@ -249,6 +248,11 @@ int32_t rfm9xw_read_temperature(const struct device *dev, int8_t *celsius);
  * @param[in] dev rfm9xw device
  */
 int32_t rfm9xw_software_reset(const struct device *dev);
+
+// int32_t rfm9xw_transmit(const struct device *dev, uint8_t buf, size_t buf_size, k_ticks_t timeout);
+// int32_t rfm9xw_receive(const struct device *dev, uint8_t buf, size_t max_size, k_ticks_t timeout);
+
+int32_t rfm9Xw_test_cw(const struct device *dev, uint32_t freq, int16_t power, k_timeout_t timeout);
 
 #ifdef __cplusplus
 }

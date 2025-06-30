@@ -1,0 +1,46 @@
+/ {
+    aliases {
+        lora0 = &radio;
+    };
+};
+
+&lora {
+    status = "disabled";
+};
+
+&spi1 {
+	pinctrl-0 = <&spi1_sck_pa5 &spi1_miso_pa6 &spi1_mosi_pa7>;
+	cs-gpios = <&gpioc 4 GPIO_ACTIVE_LOW>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	radio: rfm98w@0 {
+		#io-channel-cells= <1>;
+		status = "okay";
+		compatible = "hoperf,rfm9xw";
+		reg = <0>;
+		spi-max-frequency = <DT_FREQ_M(8)>; // pg. 20, Table 10 MAX 10MHz
+		
+		reset-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;
+		power-amplifier = "RfmPowerAmplifierSelection_PaBoost";
+
+
+		dio0-gpios = <&gpioc 5  GPIO_ACTIVE_HIGH>;
+		dio1-gpios = <&gpiob 0  GPIO_ACTIVE_HIGH>;
+		dio2-gpios = <&gpiob 1  GPIO_ACTIVE_HIGH>;
+		dio3-gpios = <&gpiob 12 GPIO_ACTIVE_HIGH>;
+		dio4-gpios = <&gpiob 13 GPIO_ACTIVE_HIGH>;
+		dio5-gpios = <&gpiob 14 GPIO_ACTIVE_HIGH>;
+
+//		dio-gpios =   <&gpioc 5  GPIO_ACTIVE_HIGH>,
+//					  <&gpiob 0  GPIO_ACTIVE_HIGH>,
+//					  <&gpiob 1  GPIO_ACTIVE_HIGH>,
+//					  <&gpiob 12 GPIO_ACTIVE_HIGH>,
+//					  <&gpiob 13 GPIO_ACTIVE_HIGH>,
+//					  <&gpiob 14 GPIO_ACTIVE_HIGH>;
+
+		// dio2-gpios = <&arduino_header 3 GPIO_ACTIVE_HIGH>;
+
+	};
+
+};

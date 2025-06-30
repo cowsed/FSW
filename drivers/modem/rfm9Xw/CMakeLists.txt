@@ -5,6 +5,6 @@
 #
 zephyr_library()
 
-zephyr_library_sources(rfm9Xw.c)
+zephyr_library_sources(rfm9Xw.c rfm9Xw_reg.c)
 
 zephyr_include_directories(.)

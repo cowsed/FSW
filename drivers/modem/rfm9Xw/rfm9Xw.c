@@ -1,16 +1,14 @@
 #include "rfm9Xw.h"
 
+#include "rfm9Xw_reg.h"
+
 #include <assert.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/spi.h>
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(rfm9xw);
-
-#define HORUS_L2_RX
-#include "horusl2.h"
 
 #define DT_DRV_COMPAT hoperf_rfm9xw
 
@@ -23,150 +21,147 @@ struct rfm9Xw_config {
 };
 
 struct rfm9Xw_data {
-    enum RfmLongRangeModeSetting long_range_mode;
-    enum RfmModulationType modulation_type;
-    enum RfmLowFrequencyMode low_frequency_mode;
     enum RfmTransceiverMode transceiver_mode;
-    enum RfmPacketConfigDataMode data_mode;
-    uint32_t carrier_freq;
-    uint32_t deviation_freq;
-    uint32_t bitrate;
 
-    enum RfmMaxPower max_power;
-    uint8_t output_power;
+    struct k_event dio_events;
 
-    enum RfmPaRamp pa_ramp;
-    enum RfmModulationShaping modulation_shaping;
+    struct rfm9Xw_modem_config cfg;
+
+    struct gpio_callback dio0_cb;
+    struct gpio_callback dio1_cb;
+    struct gpio_callback dio2_cb;
+    struct gpio_callback dio3_cb;
+    struct gpio_callback dio4_cb;
+    struct gpio_callback dio5_cb;
 
     enum RfmDio0Mapping dio0_mapping;
-    enum RfmDio0Mapping dio1_mapping;
-    enum RfmDio0Mapping dio2_mapping;
-
-    uint8_t sync_word_len;
-    uint64_t sync_word;
+    enum RfmDio1Mapping dio1_mapping;
+    enum RfmDio2Mapping dio2_mapping;
+    enum RfmDio3Mapping dio3_mapping;
+    enum RfmDio4Mapping dio4mapping;
+    enum RfmDio5Mapping dio5_mapping;
 };
 
-#define RFM_SPI_WRITE_BIT 0b10000000
-#define RFM_SPI_REG_MASK  0b01111111
-int read_rfm_reg(const struct rfm9Xw_config *config, const uint8_t reg, uint8_t *const result) {
-    // Write Data
-    uint8_t cmd[2] = {reg & RFM_SPI_REG_MASK, 0};
-    struct spi_buf txbuf = {
-        .buf = &cmd,
-        .len = 2,
-    };
-    struct spi_buf_set txbufset = {
-        .buffers = &txbuf,
-        .count = 1,
-    };
-
-    uint8_t reg8[2] = {0xbe, 0xad};
-    struct spi_buf rxbuf = {
-        .buf = &reg8,
-        .len = 2,
-    };
-    struct spi_buf_set rxbufset = {
-        .buffers = &rxbuf,
-        .count = 1,
-    };
-    int res = spi_transceive_dt(&config->bus, &txbufset, &rxbufset);
-    *result = reg8[1]; // reg8[0] is just the command we wrote
-
-    return res;
+static void dio0_cb(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins) {
+    LOG_INF("cb DIO0");
+    struct rfm9Xw_data *data = CONTAINER_OF(cb, struct rfm9Xw_data, dio0_cb);
+    if (data->cfg.modem_mode != RfmModemMode_FSK) {
+        return;
+    }
+    switch (data->dio0_mapping) {
+        case RfmDio0Mapping_Packet_PayloadReadyPacketSent:
+            if (data->transceiver_mode == RfmTransceiverMode_Receiver) {
+                k_event_post(&data->dio_events, RfmDioEvent_PayloadReady);
+            } else if (data->transceiver_mode == RfmTransceiverMode_Transmitter) {
+                k_event_post(&data->dio_events, RfmDioEvent_PacketSent);
+            }
+            break;
+        case RfmDio0Mapping_Packet_RxCrcOk:
+            k_event_post(&data->dio_events, RfmDioEvent_CrcOk);
+            break;
+        case RfmDio0Mapping_Packet_TempChangeLowBat:
+            k_event_post(&data->dio_events, RfmDioEvent_TempChange | RfmDioEvent_LowBat);
+            break;
+        default:
+            break;
+    }
 }
 
-int write_rfm_reg_burst(const struct rfm9Xw_config *config, uint8_t reg, uint8_t *data, int32_t data_len) {
-    // Write Data
-    uint8_t write_and_reg = RFM_SPI_WRITE_BIT | (reg & RFM_SPI_REG_MASK);
+static void dio1_cb(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins) {
+    LOG_INF("cb DIO1");
 
-    struct spi_buf write_and_reg_buf = {
-        .buf = &write_and_reg,
-        .len = 1,
-    };
-    struct spi_buf data_buf = {
-        .buf = data,
-        .len = data_len,
-    };
+    struct rfm9Xw_data *data = CONTAINER_OF(cb, struct rfm9Xw_data, dio1_cb);
+    if (data->cfg.modem_mode != RfmModemMode_FSK) {
+        return;
+    }
+    switch (data->dio1_mapping) {
+        case RfmDio1Mapping_Packet_FifoLevel:
+            k_event_post(&data->dio_events, RfmDioEvent_FifoLevel);
+            break;
+        case RfmDio1Mapping_Packet_FifoEmpty:
+            k_event_post(&data->dio_events, RfmDioEvent_FifoEmpty);
+            break;
+        case RfmDio1Mapping_Packet_FifoFull:
+            k_event_post(&data->dio_events, RfmDioEvent_FifoFull);
+            break;
+        default:
+            break;
+    }
+}
+static void dio2_cb(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins) {
+    LOG_INF("cb DIO2");
 
-    struct spi_buf bufs[2] = {write_and_reg_buf, data_buf};
+    struct rfm9Xw_data *data = CONTAINER_OF(cb, struct rfm9Xw_data, dio2_cb);
+    if (data->cfg.modem_mode != RfmModemMode_FSK) {
+        return;
+    }
+    switch (data->dio2_mapping) {
+        case RfmDio2Mapping_Packet_FifoFull:
+            k_event_post(&data->dio_events, RfmDioEvent_FifoFull);
+            break;
+        case RfmDio2Mapping_Packet_RxReady:
+            k_event_post(&data->dio_events, RfmDioEvent_RxReady);
+            break;
+        case RfmDio2Mapping_Packet_FifoFull_RxTimeout:
+            if (data->transceiver_mode == RfmTransceiverMode_Receiver) {
+                k_event_post(&data->dio_events, RfmDioEvent_Timeout);
+            } else {
+                k_event_post(&data->dio_events, RfmDioEvent_FifoFull);
+            }
+            break;
+        case RfmDio2Mapping_Packet_FifoFull_SyncAddress:
+            if (data->transceiver_mode == RfmTransceiverMode_Receiver) {
+                k_event_post(&data->dio_events, RfmDioEvent_SyncAddress);
+            } else {
+                k_event_post(&data->dio_events, RfmDioEvent_FifoFull);
+            }
+            break;
+    }
+}
+static void dio3_cb(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins) {
+    LOG_INF("cb DIO3");
+    struct rfm9Xw_data *data = CONTAINER_OF(cb, struct rfm9Xw_data, dio3_cb);
+    if (data->cfg.modem_mode != RfmModemMode_FSK) {
+        return;
+    }
+    switch (data->dio3_mapping) {
+        case RfmDio3Mapping_Packet_FifoEmpty:
+            k_event_post(&data->dio_events, RfmDioEvent_FifoEmpty);
+            break;
+        case RfmDio3Mapping_Packet_TxReady:
+            k_event_post(&data->dio_events, RfmDioEvent_TxReady);
+            break;
+        default:
+            break;
+    }
+}
+static void dio4_cb(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins) {
+    LOG_INF("cb DIO4");
+    struct rfm9Xw_data *data = CONTAINER_OF(cb, struct rfm9Xw_data, dio4_cb);
+}
+static void dio5_cb(const struct device *port, struct gpio_callback *cb, gpio_port_pins_t pins) {
+    LOG_INF("cb DIO5");
 
-    struct spi_buf_set set = {
-        .buffers = bufs,
-        .count = 2,
-    };
+    struct rfm9Xw_data *data = CONTAINER_OF(cb, struct rfm9Xw_data, dio5_cb);
+    switch (data->dio5_mapping) {
+        case RfmDio5Mapping_Packet_Data:
+        case RfmDio5Mapping_Packet_ClkOut:
+            // Clk would overwhelm callback
+            // data is just continous mode? dont wanna spam gpios yest
+            break;
 
-    return spi_write_dt(&config->bus, &set);
+        case RfmDio5Mapping_Packet_PllLock:
+            k_event_post(&data->dio_events, RfmDioEvent_PLLLock);
+            break;
+        case RfmDio5Mapping_Packet_ModeReady:
+            k_event_post(&data->dio_events, RfmDioEvent_ModeReady);
+            break;
+    }
 }
 
-int write_rfm_reg(const struct rfm9Xw_config *config, const uint8_t reg, uint8_t data) {
-    return write_rfm_reg_burst(config, reg, &data, 1);
-}
-
-#define REG_FIFO            0x0
-#define REG_OP_MODE         0x1
-#define REG_BITRATE_MSB     0x2
-#define REG_BITRATE_LSB     0x3
-#define REG_FDEV_MSB        0x4
-#define REG_FDEV_LSB        0x5
-#define REG_FRF_MSB         0x6
-#define REG_FRF_MID         0x7
-#define REG_FRF_LSB         0x8
-#define REG_PA_CONFIG       0x9
-#define REG_PA_RAMP         0xa
-#define REG_OCP             0xb
-#define REG_LNA             0xc
-#define REG_RX_CONFIG       0xd
-#define REG_RSSI_CONFIG     0xe
-#define REG_RSSI_COLLISION  0xf
-#define REG_RSSI_THRESH     0x10
-#define REG_RSSI_VALUE      0x11
-#define REG_RX_BW           0x12
-#define REG_AFC_BW          0x13
-#define REG_OOK_PEAK        0x14
-#define REG_OOK_FIX         0x15
-#define REG_OOK_AVG         0x16
-#define REG_AFC_FEI         0x1a
-#define REG_AFC_MSB         0x1b
-#define REG_AFC_LSB         0x1c
-#define REG_FEI_MSB         0x1d
-#define REG_FEI_LSB         0x1e
-#define REG_PREAMBLE_DETECT 0x1f
-#define REG_RX_TIMEOUT1     0x20
-#define REG_RX_TIMEOUT2     0x21
-#define REG_RX_TIMEOUT3     0x22
-#define REG_RX_DELAY        0x23
-#define REG_OSC             0x24
-#define REG_PREAMBLE_MSB    0x25
-#define REG_PREAMBLE_LSB    0x26
-#define REG_PACKET_CONFIG1  0x30
-#define REG_PACKET_CONFIG2  0x31
-#define REG_PAYLOAD_LENGTH  0x32
-#define REG_NODE_ADRS       0x33
-#define REG_BROADCAST_ADRS  0x34
-#define REG_FIFO_THRESH     0x35
-#define REG_SEQ_CONFIG1     0x36
-#define REG_SEQ_CONFIG2     0x37
-#define REG_TIMER_RESOL     0x38
-#define REG_TIMER1_COEF     0x39
-#define REG_TIMER2_COEF     0x3a
-#define REG_IMAGE_CAL       0x3b
-#define REG_TEMP            0x3c
-#define REG_LOW_BAT         0x3d
-#define REG_IRQ_FLAGS1      0x3e
-#define REG_IRQ_FLAGS2      0x3f
-#define REG_DIO_MAPPING1    0x40
-#define REG_DIO_MAPPING2    0x41
-#define REG_VERSION         0x42
-#define REG_PLL_HOP         0x44
-#define REG_TCXO            0x4b
-#define REG_PADAC           0x4d
-#define REG_FORMERTEMP      0x5b
-#define REG_BITRATEFRAC     0x5d
-#define REG_BITAGCREF       0x61
-#define REG_AGCTHRESH1      0x62
-#define REG_AGCTHRESH2      0x63
-#define REG_AGCTHRESH3      0x64
-#define REG_PLL             0x70
+gpio_callback_handler_t rfm_cbs[RFM_MAX_NUM_DIOS] = {
+    dio0_cb, dio1_cb, dio2_cb, dio3_cb, dio4_cb, dio5_cb,
+};
 
 // Helpers for printing out register information
 #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
@@ -259,75 +254,8 @@ static int32_t frf_reg_from_frequency(enum RfmModelNumber model, uint32_t freq, 
 /**
  * Some names of registers for debugging purposes
  */
-static const char *reg_names[0x71] = {
-    [REG_FIFO] = "RegFifo",
-    [REG_OP_MODE] = "RegOpMode",
-    [REG_BITRATE_MSB] = "RegBitrateMsb",
-    [REG_BITRATE_LSB] = "RegBitrateLsb",
-    [REG_FDEV_MSB] = "RegFdevMsb",
-    [REG_FDEV_LSB] = "RegFdevLsb",
-    [REG_FRF_MSB] = "RegFrfMsb",
-    [REG_FRF_MID] = "RegFrfMid",
-    [REG_FRF_LSB] = "RegFrfLsb",
-    [REG_PA_CONFIG] = "RegPaConfig",
-    [REG_PA_RAMP] = "RegPaRamp",
-    [REG_OCP] = "RegOcp",
-    [REG_LNA] = "RegLna",
-    [REG_RX_CONFIG] = "RegRxConfig",
-    [REG_RSSI_CONFIG] = "RegRssiConfig",
-    [REG_RSSI_COLLISION] = "RegRssiCollision",
-    [REG_RSSI_THRESH] = "RegRssiThresh",
-    [REG_RSSI_VALUE] = "RegRssiValue",
-    [REG_RX_BW] = "RegRxBw",
-    [REG_AFC_BW] = "RegAfcBw",
-    [REG_OOK_PEAK] = "RegOokPeak",
-    [REG_OOK_FIX] = "RegOokFix",
-    [REG_OOK_AVG] = "RegOokAvg",
-    [REG_AFC_FEI] = "RegAfcFei",
-    [REG_AFC_MSB] = "RegAfcMsb",
-    [REG_AFC_LSB] = "RegAfcLsb",
-    [REG_FEI_MSB] = "RegFeiMsb",
-    [REG_FEI_LSB] = "RegFeiLsb",
-    [REG_PREAMBLE_DETECT] = "RegPreambleDetect",
-    [REG_RX_TIMEOUT1] = "RegRxTimeout1",
-    [REG_RX_TIMEOUT2] = "RegRxTimeout2",
-    [REG_RX_TIMEOUT3] = "RegRxTimeout3",
-    [REG_RX_DELAY] = "RegRxDelay",
-    [REG_OSC] = "RegOsc",
-    [REG_PREAMBLE_MSB] = "RegPreambleMsb",
-    [REG_PREAMBLE_LSB] = "RegPreambleLsb",
-    [REG_PACKET_CONFIG1] = "RegPacketConfig1",
-    [REG_PACKET_CONFIG2] = "RegPacketConfig2",
-    [REG_PAYLOAD_LENGTH] = "RegPayloadLength",
-    [REG_NODE_ADRS] = "RegNodeAdrs",
-    [REG_BROADCAST_ADRS] = "RegBroadcastAdrs",
-    [REG_FIFO_THRESH] = "RegFifoThresh",
-    [REG_SEQ_CONFIG1] = "RegSeqConfig1",
-    [REG_SEQ_CONFIG2] = "RegSeqConfig2",
-    [REG_TIMER_RESOL] = "RegTimerResol",
-    [REG_TIMER1_COEF] = "RegTimer1Coef",
-    [REG_TIMER2_COEF] = "RegTimer2Coef",
-    [REG_IMAGE_CAL] = "RegImageCal",
-    [REG_TEMP] = "RegTemp",
-    [REG_LOW_BAT] = "RegLowBat",
-    [REG_IRQ_FLAGS1] = "RegIrqFlags1",
-    [REG_IRQ_FLAGS2] = "RegIrqFlags2",
-    [REG_DIO_MAPPING1] = "RegDioMapping1",
-    [REG_DIO_MAPPING2] = "RegDioMapping2",
-    [REG_VERSION] = "RegVersion",
-    [REG_PLL_HOP] = "RegPllHop",
-    [REG_TCXO] = "RegTcxo",
-    [REG_PADAC] = "RegPadac",
-    [REG_FORMERTEMP] = "RegFormertemp",
-    [REG_BITRATEFRAC] = "RegBitratefrac",
-    [REG_BITAGCREF] = "RegBitagcref",
-    [REG_AGCTHRESH1] = "RegAgcthresh1",
-    [REG_AGCTHRESH2] = "RegAgcthresh2",
-    [REG_AGCTHRESH3] = "RegAgcthresh3",
-    [REG_PLL] = "RegPll",
-};
 
-static int32_t dump_registers(const struct rfm9Xw_config *config) {
+int32_t dump_registers(const struct rfm9Xw_config *config) {
     static uint8_t registers[] = {
         REG_FIFO,
         REG_OP_MODE,
@@ -399,14 +327,15 @@ static int32_t dump_registers(const struct rfm9Xw_config *config) {
     uint8_t i;
     for (i = 0; i < sizeof(registers); i++) {
         uint8_t val = 0;
-        int32_t err = read_rfm_reg(config, registers[i], &val);
+        int32_t err = rfm9Xw_read_reg(&config->bus, registers[i], &val);
         if (err != 0) {
             LOG_ERR("Error reading register: %d", err);
         }
-        if (reg_names[registers[i]] == NULL) {
+        if (rfm9Xw_fsk_reg_to_string(registers[i]) == NULL) {
             LOG_INF("      0x%02x:\t0x%02x :" BYTE_TO_BINARY_PATTERN, registers[i], val, BYTE_TO_BINARY(val));
         } else {
-            LOG_INF("%18s:\t0x%02x " BYTE_TO_BINARY_PATTERN, reg_names[registers[i]], val, BYTE_TO_BINARY(val));
+            LOG_INF("%18s:\t0x%02x " BYTE_TO_BINARY_PATTERN, rfm9Xw_fsk_reg_to_string(registers[i]), val,
+                    BYTE_TO_BINARY(val));
         }
     }
     return 0;
@@ -422,7 +351,7 @@ static int32_t dump_registers(const struct rfm9Xw_config *config) {
  */
 static int32_t set_frequency_by_reg(const struct rfm9Xw_config *config, uint8_t msb, uint8_t mid, uint8_t lsb) {
     uint8_t reg_frf[3] = {msb, mid, lsb};
-    return write_rfm_reg_burst(config, REG_FRF_MSB, reg_frf, 3);
+    return rfm9Xw_write_reg_burst(&config->bus, REG_FRF_MSB, reg_frf, 3);
 }
 
 /**
@@ -440,7 +369,7 @@ static int32_t set_frequency_by_reg(const struct rfm9Xw_config *config, uint8_t 
  */
 int32_t set_carrier_frequency(const struct device *dev, uint32_t freq) {
     const struct rfm9Xw_config *config = dev->config;
-    struct rfm9Xw_data *data = dev->data;
+
     uint8_t msb = 0;
     uint8_t mid = 0;
     uint8_t lsb = 0;
@@ -455,17 +384,14 @@ int32_t set_carrier_frequency(const struct device *dev, uint32_t freq) {
     return res;
 }
 
-int32_t set_bitrate_by_reg(const struct device *dev, uint8_t msb, uint8_t lsb, uint8_t frac) {
+static int32_t set_bitrate_by_reg(const struct device *dev, uint8_t msb, uint8_t lsb, uint8_t frac) {
     const struct rfm9Xw_config *config = dev->config;
-    int32_t res = write_rfm_reg(config, REG_BITRATE_MSB, msb);
+    uint8_t full[2] = {msb, lsb};
+    int32_t res = rfm9Xw_write_reg_burst(&config->bus, REG_BITRATE_MSB, full, 2);
     if (res < 0) {
         return res;
     }
-    res = write_rfm_reg(config, REG_BITRATE_LSB, lsb);
-    if (res < 0) {
-        return res;
-    }
-    return write_rfm_reg(config, REG_BITRATEFRAC, frac);
+    return rfm9Xw_write_reg(&config->bus, REG_BITRATEFRAC, frac);
 }
 
 static int32_t set_bitrate(const struct device *dev, uint32_t bitrate) {
@@ -483,22 +409,51 @@ static int32_t set_pramble_len(const struct device *dev, uint16_t preamble_len) 
     const struct rfm9Xw_config *config = dev->config;
     uint8_t msb = (preamble_len >> 8) & 0xff;
     uint8_t lsb = (preamble_len >> 8) & 0xff;
-    int32_t res = write_rfm_reg(config, REG_PREAMBLE_MSB, msb);
+    int32_t res = rfm9Xw_write_reg(&config->bus, REG_PREAMBLE_MSB, msb);
     if (res < 0) {
         return res;
     }
-    return write_rfm_reg(config, REG_PREAMBLE_LSB, lsb);
+    return rfm9Xw_write_reg(&config->bus, REG_PREAMBLE_LSB, lsb);
 }
 
-static int32_t set_power_amplifier(const struct device *dev, enum RfmPowerAmplifierSelection pin,
-                                   enum RfmMaxPower max_power, uint8_t power_output) {
-    if (power_output > RFM_MAX_OUTPUT_POWER) {
-        LOG_WRN("Requested higher output power than available. Limitting to max");
-        power_output = RFM_MAX_OUTPUT_POWER;
-    }
+static int32_t set_power_pa_boost(const struct device *dev, int8_t power_dbm) {
     const struct rfm9Xw_config *config = dev->config;
-    uint8_t val = (pin & RFM_PA_CONFIG_MASK_PA_SELECT) | (max_power & RFM_PA_CONFIG_MASK_MAX_POWER) | power_output;
-    return write_rfm_reg(config, REG_PA_CONFIG, val);
+
+    if (power_dbm > 20) {
+        return -E2BIG;
+    } else if (power_dbm < 2) {
+        return -ERANGE;
+    }
+    uint8_t pa_config = 0b10000000; // pa boost
+    uint8_t pa_dac = 0;
+    int ret = rfm9Xw_read_reg(&config->bus, REG_PADAC, &pa_dac);
+    if (ret < 0) {
+        return ret;
+    }
+    if (power_dbm > 17) {
+        pa_config |= (power_dbm - 5) & 0xf;
+        pa_dac = (pa_dac & 0b11111000) | 7;
+        LOG_INF("Big +20");
+    } else {
+        pa_config |= (power_dbm - 2) & 0xf;
+        pa_dac = (pa_dac & 0b11111000) | 4;
+    }
+
+    ret = rfm9Xw_write_reg(&config->bus, REG_PA_CONFIG, pa_config);
+    if (ret < 0) {
+        return ret;
+    }
+    ret = rfm9Xw_write_reg(&config->bus, REG_PADAC, pa_dac);
+    return ret;
+}
+
+static int32_t set_power(const struct device *dev, enum RfmPowerAmplifierSelection power_output, uint8_t power_dbm) {
+    if (power_output == RfmPowerAmplifierSelection_PaBoost) {
+        return set_power_pa_boost(dev, power_dbm);
+    } else {
+        LOG_ERR("Jhavent done rfo output yet");
+        return -ENOTSUP;
+    }
 }
 
 /**
@@ -522,7 +477,7 @@ static int32_t frequency_dev_regs_from_fdev(uint32_t fdev, uint8_t *msb, uint8_t
 static int32_t set_frequency_deviation_by_reg(const struct device *dev, uint8_t msb, uint8_t lsb) {
     const struct rfm9Xw_config *config = dev->config;
     uint8_t data[2] = {msb, lsb};
-    return write_rfm_reg_burst(config, REG_FDEV_MSB, data, 2);
+    return rfm9Xw_write_reg_burst(&config->bus, REG_FDEV_MSB, data, 2);
 }
 
 static int32_t set_frequency_deviation(const struct device *dev, uint32_t freq_dev) {
@@ -540,18 +495,25 @@ static int32_t set_frequency_deviation(const struct device *dev, uint32_t freq_d
 static int32_t set_modulation_shaping(const struct device *dev, enum RfmModulationShaping shaping,
                                       enum RfmPaRamp ramp) {
     const struct rfm9Xw_config *config = dev->config;
-    return write_rfm_reg(config, REG_PA_RAMP,
-                         (shaping & RFM_REG_PA_RAMP_MASK_MODULATION_SHAPING) | (ramp & RFM_REG_PA_RAMP_MASK_PA_RAMP));
+    return rfm9Xw_write_reg(&config->bus, REG_PA_RAMP,
+                            (shaping & RFM_REG_PA_RAMP_MASK_MODULATION_SHAPING) |
+                                (ramp & RFM_REG_PA_RAMP_MASK_PA_RAMP));
 }
 
 static int32_t set_operating_mode(const struct device *dev, enum RfmLongRangeModeSetting long_range_mode,
                                   enum RfmModulationType mod_type, enum RfmLowFrequencyMode low_freq_mode,
                                   enum RfmTransceiverMode trans_mode) {
     const struct rfm9Xw_config *config = dev->config;
+    struct rfm9Xw_data *data = dev->data;
     uint8_t val = (long_range_mode & REG_OP_MODE_LONG_RANGE_MODE_MASK) | (mod_type & REG_OP_MODE_MODULATION_TYPE_MASK) |
                   (low_freq_mode & REG_OP_MODE_LOW_FREQ_MODE_MASK) | (trans_mode & REG_OP_MODE_TRANS_MODE_MASK);
 
-    return write_rfm_reg(config, REG_OP_MODE, val);
+    int ret = rfm9Xw_write_reg(&config->bus, REG_OP_MODE, val);
+    if (ret < 0) {
+        return ret;
+    }
+    data->transceiver_mode = trans_mode;
+    return 0;
 }
 
 int32_t rfm9xw_software_reset(const struct device *dev) {
@@ -573,6 +535,13 @@ int32_t rfm9xw_software_reset(const struct device *dev) {
     return 0;
 }
 
+void gpio_levels(const struct rfm9Xw_config *config) {
+    for (int i = 0; i < 6; i++) {
+        int val = gpio_pin_get_dt(&config->dio_gpios[i]);
+        LOG_INF("IO%d: %d", i, val);
+    }
+}
+
 static int init_gpios(const struct rfm9Xw_config *config, struct rfm9Xw_data *data) {
     if (config->reset_gpios.port != NULL) {
         // Setup GPIO
@@ -587,33 +556,105 @@ static int init_gpios(const struct rfm9Xw_config *config, struct rfm9Xw_data *da
     } else {
         LOG_WRN("No reset GPIO supplied for RFM9XW. Strange results may happen");
     }
+
+    struct gpio_callback *cbs[RFM_MAX_NUM_DIOS] = {
+        &data->dio0_cb, &data->dio1_cb, &data->dio2_cb, &data->dio3_cb, &data->dio4_cb, &data->dio5_cb,
+    };
+
     for (size_t i = 0; i < RFM_MAX_NUM_DIOS; i++) {
-        if (config->dio_gpios[i].port != NULL) {
-            LOG_INF("Initting DIO%d", i);
-            if (!gpio_is_ready_dt(&config->dio_gpios[i])) {
-                LOG_ERR("DIO%d GPIO is not ready\n", i);
-                return -ENODEV;
-            }
-            if (gpio_pin_configure_dt(&config->dio_gpios[i], GPIO_OUTPUT_INACTIVE) < 0) {
-                return -ENODEV;
-            }
-        } else {
+        if (config->dio_gpios[i].port == NULL) {
             LOG_INF("No pin assigned to DIO%d", i);
+            continue;
         }
+        LOG_INF("Initting DIO%d", i);
+        if (!gpio_is_ready_dt(&config->dio_gpios[i])) {
+            LOG_ERR("DIO%d GPIO is not ready\n", i);
+            return -ENODEV;
+        }
+        if (gpio_pin_configure_dt(&config->dio_gpios[i], GPIO_INPUT | GPIO_ACTIVE_HIGH) < 0) {
+            return -ENODEV;
+        }
+
+        gpio_init_callback(cbs[i], rfm_cbs[i], BIT(config->dio_gpios[i].pin));
+        int ret = gpio_add_callback_dt(&config->dio_gpios[i], cbs[i]);
+        if (ret != 0) {
+            LOG_WRN("Failed to conf cb on pin %d: %d", i, ret);
+        }
+        gpio_pin_interrupt_configure_dt(&config->dio_gpios[i],
+                GPIO_INT_EDGE_TO_ACTIVE);
+
     }
+    return 0;
+}
+
+int32_t rfm9Xw_set_ocp(const struct device *dev, bool enabled, uint8_t current_ma) {
+    const struct rfm9Xw_config *config = dev->config;
+    if (!enabled) {
+        return rfm9Xw_write_reg(&config->bus, REG_OCP, 0x0);
+    }
+    uint8_t ocp_trim = 0;
+    if (current_ma > 240) {
+        return -E2BIG;
+    } else if (current_ma <= 120) {
+        ocp_trim = (current_ma - 45) / 5;
+    } else if (current_ma > 120) {
+        ocp_trim = (current_ma + 30) / 10;
+    }
+    ocp_trim |= 0b01000000; // ocp on
+    return rfm9Xw_write_reg(&config->bus, REG_OCP, ocp_trim);
+}
+
+int32_t rfm9Xw_test_cw(const struct device *dev, uint32_t freq, int16_t power, k_timeout_t timeout) {
+    const struct rfm9Xw_config *config = dev->config;
+    struct rfm9Xw_data *data = dev->data;
+    LOG_INF("Testing CW");
+    set_operating_mode(dev, RfmLongRangeModeSetting_FskOokMode, RfmModulationType_FSK, RfmLowFrequencyMode_LowFrequency,
+                       RfmTransceiverMode_Standby);
+    data->transceiver_mode = RfmTransceiverMode_Transmitter;
+    set_carrier_frequency(dev, freq);
+    set_frequency_deviation(dev, 1000);
+    set_bitrate(dev, 9600);
+    rfm9Xw_set_ocp(dev, true, 240);
+    set_power(dev, config->power_amplifier, power);
+
+    k_event_clear(&data->dio_events, 0xffffff);
+    set_operating_mode(dev, RfmLongRangeModeSetting_FskOokMode, RfmModulationType_FSK, RfmLowFrequencyMode_LowFrequency,
+                       RfmTransceiverMode_Transmitter);
+    uint32_t out = k_event_wait(&data->dio_events, 0xffffffff, false, K_SECONDS(1));
+    LOG_INF("Out: %u", out);
+
+
+
+    gpio_levels(config);
+
+    // dump_registers(config);
+    k_sleep(timeout);
+    int8_t c = 0;
+    int ret = rfm9xw_read_temperature(dev, &c);
+    if (ret != 0) {
+        LOG_ERR("Failed to read temp: %d", ret);
+    } else {
+        LOG_INF("Temp: %d", (int) c);
+    }
+
+    data->transceiver_mode = RfmTransceiverMode_Standby;
+    set_operating_mode(dev, RfmLongRangeModeSetting_FskOokMode, RfmModulationType_FSK, RfmLowFrequencyMode_LowFrequency,
+                       RfmTransceiverMode_Standby);
+    LOG_INF("DONE Testing CW");
     return 0;
 }
 
 static int rfm9xw_init(const struct device *dev) {
     const struct rfm9Xw_config *config = dev->config;
     struct rfm9Xw_data *data = dev->data;
-    golay23_init();
 
     LOG_INF("Initializing rfm9xw");
     if (!device_is_ready(config->bus.bus)) {
         LOG_ERR("SPI bus '%s'not ready", config->bus.bus->name);
         return -ENODEV;
     }
+    k_event_init(&data->dio_events);
+
     int res = init_gpios(config, data);
     if (res < 0) {
         LOG_ERR("Error setting up GPIOs: %d", res);
@@ -624,47 +665,89 @@ static int rfm9xw_init(const struct device *dev) {
     if (res < 0) {
         LOG_ERR("Unable to reset: %d", res);
     }
+    data->transceiver_mode = RfmTransceiverMode_Standby;
 
-    set_power_amplifier(dev, config->power_amplifier, data->max_power, data->output_power);
-    set_modulation_shaping(dev, data->modulation_shaping, data->pa_ramp);
+    data->dio5_mapping = RfmDio5Mapping_Packet_ModeReady;
+    rfm9Xw_write_reg(&config->bus, REG_DIO_MAPPING2, 0b00010000);
+
+    gpio_levels(config);
+    LOG_INF("Cleared");
+    k_event_clear(&data->dio_events, 0xffffff);
+    set_operating_mode(dev, RfmLongRangeModeSetting_FskOokMode, RfmModulationType_FSK,
+                       RfmLowFrequencyMode_HighFrequency, RfmTransceiverMode_FsModeRx);
+    uint32_t out = k_event_wait(&data->dio_events, 0xffffffff, false, K_SECONDS(1));
+    LOG_INF("Out: %u", out);
+
+    gpio_levels(config);
     return 0;
 }
 
 int32_t rfm9xw_read_temperature(const struct device *dev, int8_t *celsius) {
+    const struct rfm9Xw_config *config = dev->config;
     struct rfm9Xw_data *data = dev->data;
 
-    set_operating_mode(dev, data->long_range_mode, data->modulation_type, data->low_frequency_mode,
-                       RfmTransceiverMode_FsModeTx);
-    k_msleep(100);
+    if (data->transceiver_mode == RfmTransceiverMode_Sleep || data->transceiver_mode == RfmTransceiverMode_Standby) {
+        return -EAGAIN;
+    }
+
     uint8_t reg = 0;
-    int ret = read_rfm_reg(dev->config, REG_TEMP, &reg);
+    int ret = rfm9Xw_read_reg(&config->bus, REG_TEMP, &reg);
     if (ret < 0) {
         return ret;
     }
+    *celsius = *(int8_t *) &reg;
+    *celsius *= -1;
+    return 0;
+}
 
-    *celsius = reg & 0x7f;
-    if ((reg & 0x80) == 0x80) {
-        *celsius *= -1;
+int rfm9Xw_configure_modem(const struct device *dev, struct rfm9Xw_modem_config *cfg) {
+    if (cfg->modem_mode != RfmModemMode_FSK) {
+        return -ENOTSUP;
     }
-    set_operating_mode(dev, data->long_range_mode, data->modulation_type, data->low_frequency_mode,
-                       RfmTransceiverMode_Standby);
+    const struct rfm9Xw_config *config = dev->config;
+    struct rfm9Xw_data *data = dev->data;
+
+    // Set to FSK and standby
+    int ret = set_operating_mode(dev, RfmLongRangeModeSetting_FskOokMode, RfmModulationType_FSK,
+                                 RfmLowFrequencyMode_HighFrequency, RfmTransceiverMode_Standby);
+    if (ret < 0) {
+        LOG_ERR("Couldn't set mode: %d", ret);
+        return ret;
+    }
+    data->transceiver_mode = RfmTransceiverMode_Standby;
+
+    ret = set_carrier_frequency(dev, cfg->fsk.carrier_freq);
+    if (ret < 0) {
+        LOG_ERR("Couldn't set carrier: %d", ret);
+        return ret;
+    }
+
+    ret = set_frequency_deviation(dev, cfg->fsk.deviation_freq);
+    if (ret < 0) {
+        LOG_ERR("Couldn't set deviation: %d", ret);
+        return ret;
+    }
+
+    ret = set_power(dev, config->power_amplifier, cfg->fsk.tx_power);
+    if (ret < 0) {
+        LOG_ERR("Couldn't set power settings: %d", ret);
+        return ret;
+    }
+
+    // ret = set_pramble_len(dev, config->power_amplifier, cfg->fsk.tx_power);
+    // if (ret < 0) {
+    // LOG_ERR("Couldn't set power settings: %d", ret);
+    // return ret;
+    // }
+
+    data->cfg = *cfg;
+
     return 0;
 }
 
 #define RFM9XW_INIT(n)                                                                                                 \
     static struct rfm9Xw_data rfm9Xw_data_##n = {                                                                      \
-        .long_range_mode = DT_STRING_TOKEN(DT_INST(n, DT_DRV_COMPAT), long_range_mode),                                \
-        .modulation_type = DT_STRING_TOKEN(DT_INST(n, DT_DRV_COMPAT), modulation_type),                                \
-        .low_frequency_mode = DT_STRING_TOKEN(DT_INST(n, DT_DRV_COMPAT), low_frequency_mode),                          \
         .transceiver_mode = RfmTransceiverMode_Standby,                                                                \
-        .data_mode = RfmPacketConfigDataMode_Packet,                                                                   \
-        .carrier_freq = DT_PROP(DT_INST(n, DT_DRV_COMPAT), carrier_frequency),                                         \
-        .deviation_freq = DT_PROP_OR(DT_INST(n, DT_DRV_COMPAT), deviation_frequency, 0),                               \
-        .bitrate = DT_PROP(DT_INST(n, DT_DRV_COMPAT), bitrate),                                                        \
-        .output_power = DT_PROP(DT_INST(n, DT_DRV_COMPAT), output_power),                                              \
-        .max_power = DT_STRING_TOKEN(DT_INST(n, DT_DRV_COMPAT), max_power),                                            \
-        .modulation_shaping = DT_STRING_TOKEN(DT_INST(n, DT_DRV_COMPAT), modulation_shaping),                          \
-        .pa_ramp = DT_STRING_TOKEN(DT_INST(n, DT_DRV_COMPAT), pa_ramp),                                                \
         .dio0_mapping = DT_STRING_TOKEN(DT_INST(n, DT_DRV_COMPAT), dio0_mapping),                                      \
     };                                                                                                                 \
                                                                                                                        \
