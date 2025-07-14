@@ -1,4 +1,5 @@
 #include "rfm9Xw_reg.h"
+#include <zephyr/drivers/spi.h>
 
 static const char *reg_names[0x71] = {
     [REG_FIFO] = "RegFifo",
@@ -121,7 +122,7 @@ int rfm9Xw_write_reg_burst(const struct spi_dt_spec *bus, uint8_t reg, uint8_t *
         .buffers = bufs,
         .count = 2,
     };
-
+    
     return spi_write_dt(bus, &set);
 }
 

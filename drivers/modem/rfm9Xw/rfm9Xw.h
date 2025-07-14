@@ -192,7 +192,7 @@ enum RfmDioEvent {
     RfmDioEvent_CrcOk = BIT(2),
     RfmDioEvent_PayloadReady = BIT(3),
     RfmDioEvent_PacketSent = BIT(4),
-    RfmDioEvent_FifoLevel = BIT(5),
+    RfmDioEvent_FifoLevel = BIT(5), // Want FIFO level 0->1 (filling) and FIFO level 1->0 (draining)
     RfmDioEvent_FifoFull = BIT(6),
     RfmDioEvent_FifoEmpty = BIT(7),
     RfmDioEvent_RxReady = BIT(8),
@@ -205,6 +205,7 @@ enum RfmDioEvent {
     RfmDioEvent_RSSI = BIT(15),
 
     RfmDioEvent_Canceled = BIT(31), // Use this to wakeup active thread and release radio
+    RfmDioEvent_All = 0xffffffff,
 };
 
 struct rfm9Xw_fsk_modem_config {
@@ -249,10 +250,11 @@ int32_t rfm9xw_read_temperature(const struct device *dev, int8_t *celsius);
  */
 int32_t rfm9xw_software_reset(const struct device *dev);
 
-// int32_t rfm9xw_transmit(const struct device *dev, uint8_t buf, size_t buf_size, k_ticks_t timeout);
-// int32_t rfm9xw_receive(const struct device *dev, uint8_t buf, size_t max_size, k_ticks_t timeout);
-
+int rfm9xw_transmit(const struct device *dev, uint8_t *buf, size_t buflen);
+int rfm9xw_receive(const struct device *dev, uint8_t *buf, size_t max_buflen, k_timeout_t timeout);int rfm9xw_receive(const struct device *dev, uint8_t *buf, size_t max_buflen, k_timeout_t timeout);
 int32_t rfm9Xw_test_cw(const struct device *dev, uint32_t freq, int16_t power, k_timeout_t timeout);
+
+
 
 #ifdef __cplusplus
 }

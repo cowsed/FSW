@@ -44,6 +44,7 @@ extern "C" {
 #define REG_OSC             0x24
 #define REG_PREAMBLE_MSB    0x25
 #define REG_PREAMBLE_LSB    0x26
+#define REG_SYNC_CONFIG     0x27
 #define REG_PACKET_CONFIG1  0x30
 #define REG_PACKET_CONFIG2  0x31
 #define REG_PAYLOAD_LENGTH  0x32
