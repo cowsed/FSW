@@ -3,17 +3,13 @@
 
 LOG_MODULE_REGISTER(CGyroscope);
 
-CGyroscope::CGyroscope(const device& dev)
-    : CSensorDevice(dev) {
-}
+CGyroscope::CGyroscope(const device& dev) : CSensorDevice(dev) {}
 
 bool CGyroscope::UpdateSensorValue() {
-    if ((CBase::UpdateSensorValue()) &&
-        (0 == sensor_channel_get(&dev, SENSOR_CHAN_GYRO_XYZ, &gyroscopeData.x))) {
+    if ((CBase::UpdateSensorValue()) && (0 == sensor_channel_get(&dev, SENSOR_CHAN_GYRO_XYZ, &gyroscopeData.x))) {
         return true;
     }
 
-    LOG_WRN("Failed to update sensor values");
     return false;
 }
 
@@ -27,7 +23,7 @@ sensor_value CGyroscope::GetSensorValue(sensor_channel chan) const {
             return gyroscopeData.z;
         default:
             // Assert here since this should never occur
-            LOG_ERR("Invalid sensor channel (%d) called for gyroscope", chan);
+            LOG_ERR("Invalid sensor channel (%d) called for gyroscope", static_cast<int>(chan));
             k_oops();
             return {INT32_MIN, INT32_MIN};
     }

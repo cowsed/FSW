@@ -1,5 +1,4 @@
-#ifndef C_SENSOR_DEVICE_H
-#define C_SENSOR_DEVICE_H
+#pragma once
 
 #include <zephyr/drivers/sensor.h>
 
@@ -78,6 +77,24 @@ public:
         return dev.name;
     }
 
+    /**
+     * Convert a value to milli-units
+     * @param value Value to convert
+     * @return Input value in milli-units
+     */
+    static constexpr float ToMilliUnits(float value) {
+        return value * 1000.0f;
+    }
+
+    /**
+     * Convert a value to micro-units
+     * @param value Value to convert
+     * @return Input value in micro-units
+     */
+    static constexpr float ToMicroUnits(float value) {
+        return value * 1000000.0f;
+    }
+
 protected:
     const device &dev;
 
@@ -90,4 +107,4 @@ private:
     bool isInitialized;
 };
 
-#endif //C_SENSOR_DEVICE_H
+

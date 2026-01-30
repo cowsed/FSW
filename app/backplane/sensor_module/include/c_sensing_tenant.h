@@ -1,34 +1,37 @@
-#ifndef C_SENSING_TENANT_H
-#define C_SENSING_TENANT_H
+#pragma once 
 
-#include <f_core/messaging/c_message_port.h>
-#include <f_core/os/c_tenant.h>
-#include <zephyr/device.h>
+#include "c_detection_handler.h"
+#include "f_core/device/c_rtc.h"
+
+#include <array>
 #include <f_core/device/sensor/c_accelerometer.h>
 #include <f_core/device/sensor/c_barometer.h>
 #include <f_core/device/sensor/c_gyroscope.h>
 #include <f_core/device/sensor/c_magnetometer.h>
 #include <f_core/device/sensor/c_temperature_sensor.h>
-#include <array>
-
+#include <f_core/messaging/c_message_port.h>
+#include <f_core/os/c_runnable_tenant.h>
 #include <n_autocoder_types.h>
-
+#include <zephyr/device.h>
 
 class CSensorDevice;
 
-class CSensingTenant : public CTenant {
-public:
-    explicit CSensingTenant(const char* name, CMessagePort<NTypes::SensorData> &dataToBroadcast, CMessagePort<NTypes::SensorData> &dataToLog);
+class CSensingTenant : public CRunnableTenant {
+  public:
+    explicit CSensingTenant(const char *name, CMessagePort<NTypes::SensorData> &dataToBroadcast, CMessagePort<NTypes::LoRaBroadcastSensorData> &downlinkDataToBroadcast,
+                            CMessagePort<NTypes::TimestampedSensorData> &dataToLog, CDetectionHandler &handler);
     ~CSensingTenant() override = default;
 
     void Startup() override;
     void PostStartup() override;
     void Run() override;
 
-private:
+  private:
     CMessagePort<NTypes::SensorData> &dataToBroadcast;
-    CMessagePort<NTypes::SensorData> &dataToLog;
+    CMessagePort<NTypes::TimestampedSensorData> &dataToLog;
+    CMessagePort<NTypes::LoRaBroadcastSensorData> &dataToDownlink;
 
+    CDetectionHandler &detectionHandler;
     // Sensor instances
     CAccelerometer imuAccelerometer;
     CGyroscope imuGyroscope;
@@ -38,7 +41,11 @@ private:
     CTemperatureSensor thermometer;
     CMagnetometer magnetometer;
 
-    std::array<CSensorDevice*, 7> sensors;
-};
+    std::array<CSensorDevice *, 7> sensors;
 
-#endif // C_SENSING_TENANT_H
+    CRtc rtc{*DEVICE_DT_GET(DT_ALIAS(rtc))};
+
+    void sendDownlinkData(const NTypes::SensorData &data);
+
+    void calibrateADXL375();
+};

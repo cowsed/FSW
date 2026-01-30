@@ -3,17 +3,13 @@
 
 LOG_MODULE_REGISTER(CMagnetometer);
 
-CMagnetometer::CMagnetometer(const device& dev)
-    : CSensorDevice(dev) {
-}
+CMagnetometer::CMagnetometer(const device& dev) : CSensorDevice(dev) {}
 
 bool CMagnetometer::UpdateSensorValue() {
-    if ((CBase::UpdateSensorValue()) &&
-        (0 == sensor_channel_get(&dev, SENSOR_CHAN_MAGN_XYZ, &magData.x))) {
+    if ((CBase::UpdateSensorValue()) && (0 == sensor_channel_get(&dev, SENSOR_CHAN_MAGN_XYZ, &magData.x))) {
         return true;
     }
 
-    LOG_WRN("Failed to update sensor values");
     return false;
 }
 
@@ -27,7 +23,7 @@ sensor_value CMagnetometer::GetSensorValue(sensor_channel chan) const {
             return magData.z;
         default:
             // Assert here since this should never occur
-            LOG_ERR("Invalid sensor channel (%d) called for magnetometer", chan);
+            LOG_ERR("Invalid sensor channel (%d) called for magnetometer", static_cast<int>(chan));
             k_oops();
             return {INT32_MIN, INT32_MIN};
     }

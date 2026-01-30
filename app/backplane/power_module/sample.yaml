@@ -5,11 +5,14 @@ common:
   build_only: true
   integration_platforms:
     - power_module@2
+    - blt_plane
     - native_sim
 tests:
   backplane.power_module.debug:
     extra_overlay_confs:
       - debug.conf
+      - sim.conf
   backplane.power_module.native_sim:
     extra_overlay_confs:
+      - sim.conf
       - debug.conf

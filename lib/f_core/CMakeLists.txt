@@ -3,17 +3,11 @@
 
 zephyr_library()
 
-FILE(GLOB sources
-        net/device/*.cpp
-        net/network/*.cpp
-        net/transport/*.cpp
-
-        device/sensor/*.cpp
-        flight/*.cpp
-        messaging/*.cpp
-        
-        os/*.cpp
-
-        utils/*.cpp
-)
-zephyr_library_sources(${sources})
+add_subdirectory_ifdef(CONFIG_F_CORE_DEVICE device)
+add_subdirectory_ifdef(CONFIG_F_CORE_SENSOR device/sensor)
+add_subdirectory_ifdef(CONFIG_F_CORE_NET net)
+add_subdirectory_ifdef(CONFIG_F_CORE_RADIO radio)
+add_subdirectory_ifdef(CONFIG_F_CORE_OS os)
+add_subdirectory_ifdef(CONFIG_F_CORE_UTILS utils)
+add_subdirectory_ifdef(CONFIG_F_CORE_PROTOCOLS radio/protocols)
+add_subdirectory_ifdef(CONFIG_F_CORE_STATE_MACHINE state_machine)

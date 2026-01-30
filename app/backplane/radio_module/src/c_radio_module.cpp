@@ -1,5 +1,3 @@
-#ifndef CONFIG_RADIO_MODULE_RECEIVER
-
 #include "c_radio_module.h"
 
 // F-Core Tenant
@@ -7,19 +5,18 @@
 #include <f_core/messaging/c_msgq_message_port.h>
 #include <zephyr/drivers/gnss.h>
 
-K_MSGQ_DEFINE(loraBroadcastQueue, sizeof(NTypes::RadioBroadcastData), 10, 4);
-K_MSGQ_DEFINE(udpBroadcastQueue, sizeof(NTypes::RadioBroadcastData), 10, 4);
-K_MSGQ_DEFINE(gnssDataLogQueue, sizeof(NTypes::GnssLoggingData), 10, 4);
-static auto loraBroadcastMsgQueue = CMsgqMessagePort<NTypes::RadioBroadcastData>(loraBroadcastQueue);
-static auto udpBroadcastMsgQueue = CMsgqMessagePort<NTypes::RadioBroadcastData>(udpBroadcastQueue);
-static auto gnssLogMsgQueue = CMsgqMessagePort<NTypes::GnssLoggingData>(gnssDataLogQueue);
+K_MSGQ_DEFINE(loraBroadcastQueue, sizeof(LaunchLoraFrame), 10, 4);
+static auto loraBroadcastMsgQueue = CMsgqMessagePort<LaunchLoraFrame>(loraBroadcastQueue);
+
+K_MSGQ_DEFINE(gnssDataLogQueue, sizeof(NTypes::GnssData), 10, 4);
+static auto gnssLogMsgQueue = CMsgqMessagePort<NTypes::GnssData>(gnssDataLogQueue);
 
 CRadioModule::CRadioModule() : CProjectConfiguration(),
 #ifndef CONFIG_ARCH_POSIX
                                lora(*DEVICE_DT_GET(DT_ALIAS(lora))),
 #endif
-                               loraBroadcastMessagePort(loraBroadcastMsgQueue),
-                               udpBroadcastMessagePort(udpBroadcastMsgQueue), gnssDataLogMessagePort(gnssLogMsgQueue) {}
+                               loraDownlinkMessagePort(loraBroadcastMsgQueue),
+                                gnssDataLogMessagePort(gnssLogMsgQueue) {}
 
 void CRadioModule::AddTenantsToTasks() {
     // Networking
@@ -28,7 +25,14 @@ void CRadioModule::AddTenantsToTasks() {
 
 #ifndef CONFIG_ARCH_POSIX
     // LoRa
-    loraTask.AddTenant(loraTransmitTenant);
+    loraTenant.RegisterFrameHandler(NNetworkDefs::RADIO_MODULE_COMMAND_PORT, remoteGpioHandler);
+    loraTenant.RegisterFrameHandler(NNetworkDefs::RADIO_MODULE_DATA_REQUEST_PORT, downlinkSchedulerTenant);
+    loraTenant.RegisterFrameHandler(NNetworkDefs::RADIO_MODULE_FREQUENCY_CHANGE_PORT, frequencyChangeHandler);
+    loraTenant.RegisterDefaultFrameHandler(loraToUdpHandler);
+
+    loraTask.AddTenant(downlinkSchedulerTenant);
+    loraTask.AddTenant(loraTenant);
+
 #endif
     // Data Logging
     dataLoggingTask.AddTenant(dataLoggerTenant);
@@ -49,6 +53,8 @@ void CRadioModule::AddTasksToRtos() {
     NRtos::AddTask(gnssTask);
 }
 
-void CRadioModule::SetupCallbacks() {}
-
-#endif //CONFIG_RADIO_MODULE_RECEIVER
+void CRadioModule::SetupCallbacks() {
+    alertTenant.Subscribe(&stateMachineUpdater);
+    sntpServerTenant.Register();
+    alertTenant.Register();
+}

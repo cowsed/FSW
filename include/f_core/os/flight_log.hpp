@@ -1,7 +1,8 @@
-#ifndef F_CORE_FLIGHT_FLIGHT_LOG_H
-#define F_CORE_FLIGHT_FLIGHT_LOG_H
+#pragma once
+
 #include <stdint.h>
 #include <string.h>
+#include <string>
 #include <zephyr/fs/fs.h>
 #include <zephyr/kernel.h>
 
@@ -13,6 +14,14 @@
 class CFlightLog {
   public:
     /**
+     * Noop constructor - allows generating filename then initializing. MAKE SURE TO CALL A REAL CONSTRUCTOR BEFORE FURTHER USE
+     */
+    CFlightLog();
+    /**
+   * Open a flight log.
+   * k_uptime_get() at time of opening is recorded as the first line of the flight log
+   */
+    explicit CFlightLog(const std::string& fname); /**
    * Open a flight log.
    * k_uptime_get() at time of opening is recorded as the first line of the flight log
    */
@@ -78,5 +87,3 @@ class CFlightLog {
 
     fs_file_t file;
 };
-
-#endif

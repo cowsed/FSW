@@ -1,16 +1,15 @@
-#ifndef PRINTCOUNT_H
-#define PRINTCOUNT_H
+#pragma once
 
 #include "message.h"
 
 // F-Core Includes
 #include <f_core/messaging/c_message_port.h>
-#include <f_core/os/c_tenant.h>
+#include <f_core/os/c_runnable_tenant.h>
 
 /**
  * Increments and prints the current count for a given integer.
  */
-class CPublisher : public CTenant {
+class CPublisher : public CRunnableTenant {
 public:
     /**
      * Constructor.
@@ -30,11 +29,9 @@ public:
     void Run() override;
 
 private:
-    using CBase = CTenant;
+    using CBase = CRunnableTenant;
 
     CMessagePort<Message> &messagePort;
     Message message;
 };
-
-#endif //PRINTCOUNT_H
 

@@ -1,13 +1,12 @@
-#ifndef C_UDP_BROADCAST_TENANT_H
-#define C_UDP_BROADCAST_TENANT_H
+#pragma once
 
-#include <f_core/net/network/c_ipv4.h>
-#include <f_core/net/transport/c_udp_socket.h>
-#include <f_core/messaging/c_message_port.h>
-#include <f_core/os/c_tenant.h>
+#include "f_core/net/network/c_ipv4.h"
+#include "f_core/net/transport/c_udp_socket.h"
+#include "f_core/messaging/c_message_port.h"
+#include "f_core/os/c_runnable_tenant.h"
 
 template <typename T>
-class CUdpBroadcastTenant : public CTenant {
+class CUdpBroadcastTenant : public CRunnableTenant {
 public:
     /**
      * Constructor
@@ -17,7 +16,7 @@ public:
      * @param dstPort Destination port to broadcast to
      * @param messagePort Message port to receive messages to broadcast
      */
-    CUdpBroadcastTenant(const char* name, const char *ipAddr, const int srcPort, const int dstPort, CMessagePort<T> &messagePort) : CTenant(name), udp(CIPv4(ipAddr), srcPort, dstPort), messagesToBroadcast(&messagePort)  {}
+    CUdpBroadcastTenant(const char* name, const char *ipAddr, const int srcPort, const int dstPort, CMessagePort<T> &messagePort) : CRunnableTenant(name), udp(CIPv4(ipAddr), srcPort, dstPort), messagesToBroadcast(&messagePort), dstPort(dstPort)  {}
 
     /**
      * Constructor
@@ -25,7 +24,7 @@ public:
      * @param udp UDP socket to broadcast messages to
      * @param messagePort Message port to receive messages to broadcast
      */
-    CUdpBroadcastTenant(const char* name, const CUdpSocket& udp, CMessagePort<T> &messagePort) : CTenant(name), udp(udp), messagesToBroadcast(&messagePort) {}
+    CUdpBroadcastTenant(const char* name, const CUdpSocket& udp, CMessagePort<T> &messagePort) : CRunnableTenant(name), udp(udp), messagesToBroadcast(&messagePort) {}
 
     /**
      * Destructor
@@ -48,7 +47,7 @@ public:
     void TransmitMessageAsynchronous() {
         T message{};
         if (messagesToBroadcast->Receive(message, K_NO_WAIT) == 0) {
-            udp.TransmitAsynchronous(&message, sizeof(T));
+            udp.TransmitAsynchronous(&message, sizeof(T), dstPort);
         }
     }
 
@@ -72,6 +71,5 @@ public:
 private:
     CUdpSocket udp;
     CMessagePort<T> *messagesToBroadcast;
+    uint16_t dstPort;
 };
-
-#endif //C_UDP_BROADCAST_TENANT_H

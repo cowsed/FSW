@@ -1,5 +1,4 @@
-#ifndef C_SOFT_TIMER_H
-#define C_SOFT_TIMER_H
+#pragma once
 #include <zephyr/kernel.h>
 
 class CSoftTimer {
@@ -12,6 +11,12 @@ public:
     explicit CSoftTimer(k_timer_expiry_t expirationFn = nullptr, k_timer_stop_t stopFn = nullptr) {
         k_timer_init(&timer, expirationFn, stopFn);
     }
+
+    // Make the timer non-copyable and non-movable
+    CSoftTimer(const CSoftTimer&) = delete;
+    CSoftTimer& operator=(const CSoftTimer&) = delete;
+    CSoftTimer(CSoftTimer&&) = delete;
+    CSoftTimer& operator=(CSoftTimer&&) = delete;
 
     /**
     * Destructor
@@ -28,6 +33,42 @@ public:
         // Duration (second arg) is the initial expiration time
         // Period (third arg) is the time set after each expiration
         k_timer_start(&timer, K_MSEC(millis), K_MSEC(millis));
+        running = true;
+    }
+
+    /**
+     * Start the timer with the given expiration time
+     * @param timeout Zephyr timeout object
+     */
+    void StartTimer(k_timeout_t timeout) {
+        // Duration (second arg) is the initial expiration time
+        // Period (third arg) is the time set after each expiration
+        k_timer_start(&timer, timeout, timeout);
+        running = true;
+    }
+
+    /**
+    * Start the timer with the given expiration time
+    * @param timeout Zephyr timeout object
+    * @param initialExpiration Zephyr timeout object for the initial expiration time
+    */
+    void StartTimer(k_timeout_t timeout, k_timeout_t initialExpiration) {
+        // Duration (second arg) is the initial expiration time
+        // Period (third arg) is the time set after each expiration
+        k_timer_start(&timer, timeout, initialExpiration);
+        running = true;
+    }
+
+    /**
+    * Start the timer with the given expiration time
+    * @param millis Time in milliseconds until the timer expires
+    * @param initialExpirationMillis Time in milliseconds to wait before the first expiration
+    */
+    void StartTimer(int millis, int initialExpirationMillis) {
+        // Duration (second arg) is the initial expiration time
+        // Period (third arg) is the time set after each expiration
+        k_timer_start(&timer, K_MSEC(initialExpirationMillis), K_MSEC(millis));
+        running = true;
     }
 
     /**
@@ -35,6 +76,7 @@ public:
     */
     void StopTimer() {
         k_timer_stop(&timer);
+        running = false;
     }
 
     /**
@@ -61,16 +103,49 @@ public:
     }
 
     /**
+     * Check if the timer is running
+     * @return True if the timer is running, false otherwise
+     */
+    bool IsRunning() const {
+        return running;
+    }
+
+    /**
     * Check if the timer has expired
+    * @return True if the timer has expired, false otherwise
     */
     bool IsExpired() {
         return k_timer_status_get(&timer) != 0;
     }
 
+    /**
+     * Set the user data for the timer. Ideal for passing data to callbacks
+     * @param data User data to set
+     */
+    void SetUserData(void* data) {
+        k_timer_user_data_set(&timer, data);
+    }
+
+    /**
+     * Get the user data for the timer
+     * @return User data
+     */
+    void* GetUserData() const {
+        return k_timer_user_data_get(&timer);
+    }
+
+    /**
+     * Get the number of times the timer expired since this function was last called
+     * @return Expiration count since last read
+     */
+    int GetExpiredCountSinceLastRead() {
+        return k_timer_status_get(&timer);
+    }
+
 private:
     k_timer timer;
+    bool running = false;
 };
 
 
 
-#endif //C_SOFT_TIMER_H

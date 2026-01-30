@@ -14,12 +14,14 @@ manifest:
   projects:
     - name: zephyr
       remote: zephyrproject-rtos
-      revision: main
+      revision: v4.3.0
       import:
         name-allowlist:
-          - cmsis
+          - cmsis_6
+          - cmsis-dsp
           - hal_st
           - hal_stm32
+          - hal_nxp
           - littlefs
           - loramac-node
           - hal_st
@@ -28,6 +30,9 @@ manifest:
           - nanopb
           - mbedtls
           - fatfs
+          - segger
+          - percepio
+          - lz4
       clone-depth: 1
 
     - name: zephyr-meshtastic

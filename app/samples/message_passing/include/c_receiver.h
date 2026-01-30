@@ -1,13 +1,12 @@
-#ifndef HELLOTENANT_H
-#define HELLOTENANT_H
+#pragma once
 
 #include "message.h"
 
 // F-Core Includes
 #include <f_core/messaging/c_message_port.h>
-#include <f_core/os/c_tenant.h>
+#include <f_core/os/c_runnable_tenant.h>
 
-class CReceiver : public CTenant {
+class CReceiver : public CRunnableTenant {
 public:
     /**
      * Constructor
@@ -23,7 +22,7 @@ public:
     void Run() override;
 
 private:
-    using CBase = CTenant;
+    using CBase = CRunnableTenant;
 
     CMessagePort<Message> &messagePort;
     CMessagePort<bool> &completedPort;
@@ -31,4 +30,4 @@ private:
     int messageCountToReceive;
 };
 
-#endif //HELLOTENANT_H
+

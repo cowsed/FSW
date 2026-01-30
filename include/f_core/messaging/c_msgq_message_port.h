@@ -1,5 +1,4 @@
-#ifndef C_MSGQ_MESSAGE_PORT_H
-#define C_MSGQ_MESSAGE_PORT_H
+#pragma once
 
 #include <f_core/messaging/c_message_port.h>
 #include <zephyr/kernel.h>
@@ -37,8 +36,22 @@ public:
         return k_msgq_get(queue, &message, timeout);
     }
 
+    /**
+     * See parent docs
+     */
+    void Clear() override {
+        k_msgq_purge(queue);
+    }
+
+    /**
+     * See parent docs
+     */
+    size_t AvailableSpace() override {
+        return k_msgq_num_free_get(queue);
+    }
+
 private:
     k_msgq *queue;
 };
 
-#endif // C_MSGQ_MESSAGE_PORT_H
+

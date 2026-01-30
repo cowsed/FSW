@@ -4,6 +4,7 @@
 #include <zephyr/net/socket.h>
 
 #include <zephyr/logging/log.h>
+#include <zephyr/net/socket_service.h>
 #include <zephyr/posix/fcntl.h>
 
 LOG_MODULE_REGISTER(CUdpSocket);
@@ -15,21 +16,24 @@ CUdpSocket::CUdpSocket(const CIPv4& ipv4, uint16_t srcPort, uint16_t dstPort) : 
         return;
     }
 
-    sock = zsock_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sock < 0) {
+    sockfd.fd = zsock_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sockfd.fd < 0) {
+        LOG_ERR("Failed to create socket: %d", errno);
         return;
     }
 
 #if !defined(CONFIG_ARCH_POSIX) && !defined(CONFIG_NET_NATIVE_OFFLOADED_SOCKETS)
-    sockaddr_in addr = {
+    sockaddr_in addr{
         .sin_family = AF_INET,
         .sin_port = htons(srcPort),
         .sin_addr = INADDR_ANY // Bind to all interfaces TODO: Might not need ipv4 variable anymore
     };
 
-    if (zsock_bind(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
-        LOG_ERR("Failed to bind socket.");
-        zsock_close(sock);
+    if (zsock_bind(sockfd.fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+        LOG_ERR("Failed to bind socket: %d", errno);
+        zsock_close(sockfd.fd);
+        sockfd.fd = -1;
+        return;
     }
 #else
     LOG_WRN("Skipping bind. Using native_sim loopback");
@@ -43,51 +47,58 @@ CUdpSocket::CUdpSocket(const CIPv4& ipv4, uint16_t srcPort, uint16_t dstPort) : 
 }
 
 CUdpSocket::~CUdpSocket() {
-    zsock_close(sock);
+    if (sockfd.fd >= 0) {
+        net_socket_service_unregister(serviceDesc);
+        zsock_close(sockfd.fd);
+        sockfd.fd = -1;
+    }
 }
 
 int CUdpSocket::TransmitSynchronous(const void* data, size_t len) {
-    static const sockaddr_in addr{
+    const sockaddr_in addr{
         .sin_family = AF_INET,
         .sin_port = htons(dstPort),
     };
 
     z_impl_net_addr_pton(AF_INET, BROADCAST_IP, const_cast<in_addr*>(&addr.sin_addr));
 
-    int ret = zsock_sendto(sock, data, len, 0, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
+    int ret = zsock_sendto(sockfd.fd, data, len, 0, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
     if (ret < 0) {
-        LOG_ERR("Failed to send broadcast message (%d)", ret);
+        LOG_ERR("Failed to send broadcast message (%d)", errno);
     }
 
     return ret;
 }
 
-int CUdpSocket::ReceiveSynchronous(void* data, size_t len) {
-    return zsock_recvfrom(sock, data, len, 0, nullptr, nullptr);
+int CUdpSocket::ReceiveSynchronous(void* data, size_t len, sockaddr *srcAddr, socklen_t *srcAddrLen) {
+    return zsock_recvfrom(sockfd.fd, data, len, 0, srcAddr, srcAddrLen);
 }
 
 int CUdpSocket::TransmitAsynchronous(const void* data, size_t len) {
-    static const sockaddr_in addr = {
+    return TransmitAsynchronous(data, len, dstPort);
+}
+
+int CUdpSocket::TransmitAsynchronous(const void* data, size_t len, uint16_t dstPort) {
+    const sockaddr_in addr{
         .sin_family = AF_INET,
         .sin_port = htons(dstPort),
     };
-    int flags = zsock_fcntl(sock, F_GETFL, 0);
+    int flags = zsock_fcntl(sockfd.fd, F_GETFL, 0);
     if (flags < 0) {
         LOG_ERR("Failed to get socket flags (%d)", flags);
-        return -1;
+        return flags;
     }
 
     if (!(flags & O_NONBLOCK)) {
         flags |= O_NONBLOCK;
-        if (zsock_fcntl(sock, F_SETFL, flags) < 0) {
+        if (zsock_fcntl(sockfd.fd, F_SETFL, flags) < 0) {
             LOG_ERR("Failed to set socket to non-blocking mode.");
             return -1;
         }
     }
 
     z_impl_net_addr_pton(AF_INET, BROADCAST_IP, const_cast<in_addr*>(&addr.sin_addr));
-
-    int ret = zsock_sendto(sock, data, len, 0, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
+    int ret = zsock_sendto(sockfd.fd, data, len, 0, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
     if (ret < 0 && errno != EWOULDBLOCK && errno != EAGAIN) {
         LOG_ERR("Failed to send async message (%d)", errno);
     }
@@ -95,8 +106,8 @@ int CUdpSocket::TransmitAsynchronous(const void* data, size_t len) {
     return ret;
 }
 
-int CUdpSocket::ReceiveAsynchronous(void* data, size_t len) {
-    int flags = zsock_fcntl(sock, F_GETFL, 0);
+int CUdpSocket::ReceiveAsynchronous(void* data, size_t len, sockaddr *srcAddr, socklen_t *srcAddrLen) {
+    int flags = zsock_fcntl(sockfd.fd, F_GETFL, 0);
     if (flags < 0) {
         LOG_ERR("Failed to get socket flags (%d)", flags);
         return -1;
@@ -104,13 +115,13 @@ int CUdpSocket::ReceiveAsynchronous(void* data, size_t len) {
 
     if (!(flags & O_NONBLOCK)) {
         flags |= O_NONBLOCK;
-        if (zsock_fcntl(sock, F_SETFL, flags) < 0) {
+        if (zsock_fcntl(sockfd.fd, F_SETFL, flags) < 0) {
             LOG_ERR("Failed to set socket to non-blocking mode.");
             return -1;
         }
     }
 
-    const int ret = zsock_recvfrom(sock, data, len, 0, nullptr, nullptr);
+    const int ret = zsock_recvfrom(sockfd.fd, data, len, 0, srcAddr, srcAddrLen);
     if (ret < 0) {
         if ((errno == EWOULDBLOCK) || (errno == EAGAIN)) {
             return 0;
@@ -122,10 +133,40 @@ int CUdpSocket::ReceiveAsynchronous(void* data, size_t len) {
     return ret;
 }
 
+int CUdpSocket::RegisterSocketService(net_socket_service_desc* desc, void* userData) {
+    if (desc == nullptr) {
+        LOG_ERR("Invalid socket service descriptor");
+        return -1;
+    }
+
+    if (sockfd.fd < 0) {
+        LOG_ERR("Socket file descriptor is invalid");
+        return -1;
+    }
+
+    auto* serviceUserData = new SocketServiceUserData{this, userData};
+    desc->pev[0].user_data = serviceUserData;
+
+    int ret = net_socket_service_register(desc, &sockfd, 1, serviceUserData);
+    if (ret == -ENOENT) {
+        LOG_ERR("Socket service not found.");
+        return ret;
+    } else if (ret == -EINVAL) {
+        LOG_ERR("Invalid parameter for socket service registration.");
+        return ret;
+    } else if (ret < 0) {
+        LOG_ERR("Failed to register socket service (%d)", ret);
+        return ret;
+    }
+
+    return 0;
+}
+
+
 int CUdpSocket::SetTxTimeout(const int timeoutMillis) {
-    return zsock_setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeoutMillis, sizeof(timeoutMillis));
+    return zsock_setsockopt(sockfd.fd, SOL_SOCKET, SO_SNDTIMEO, &timeoutMillis, sizeof(timeoutMillis));
 }
 
 int CUdpSocket::SetRxTimeout(const int timeoutMillis) {
-    return zsock_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeoutMillis, sizeof(timeoutMillis));
+    return zsock_setsockopt(sockfd.fd, SOL_SOCKET, SO_RCVTIMEO, &timeoutMillis, sizeof(timeoutMillis));
 }
